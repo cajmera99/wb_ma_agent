@@ -86,9 +86,16 @@ curl http://localhost:8000/health
 ```
 score_and_rank → evaluate_coverage ──┬──(sufficient)──→ llm_rerank → generate_rationales
                                      └──(thin data)──→ expand_candidate_pool ──→ llm_rerank
+                                                                                        ↓
+                                                                               quality_gate
+                                                                              ↙            ↘
+                                                                          END     targeted_regeneration → END
 ```
 
-The conditional edge is a **deterministic Python function** (`route_after_coverage`), not an LLM call. If fewer than 15 acquirers score above 30/100, the pool widens from top-20 to top-25 before reranking. The LLM is used only for decisions that require qualitative judgment — not decisions computable with a comparison operator.
+The graph has two conditional edges with different routing philosophies:
+
+- **`route_after_coverage`** — deterministic Python threshold. If fewer than 15 acquirers score above 30/100, the pool widens from top-20 to top-25 before reranking.
+- **`route_after_quality_gate`** — LLM-driven. After all 10 rationales are generated, compact summaries are sent to GPT-4o-mini in a single call. The LLM identifies 0–3 weak rationales (low citation density, template recycling across acquirers, thin conviction, bare risk flag labels) and routes to `targeted_regeneration` if any are found. This cross-acquirer qualitative comparison cannot be reduced to a Python threshold — it is the primary genuinely agentic routing decision in the graph.
 
 ```
 Backend startup (once)
@@ -98,11 +105,14 @@ Backend startup (once)
 └── Build LangChain tools (factory functions closed over the static data)
 
 Per-request agent (BackgroundTask)
-├── Node 1: score_and_rank       — pure Python, scores all 107 acquirers in ~5ms
-├── Node 2: evaluate_coverage    — deterministic routing
-├── Node 3: expand_candidate_pool (conditional) — widens pool if sector data is thin
-├── Node 4: llm_rerank           — GPT-4o with tool-calling selects final 10
-└── Node 5: generate_rationales  — 10 concurrent GPT-4o-mini calls → Pydantic validated
+├── Node 1: score_and_rank          — pure Python, scores all 107 acquirers in ~5ms
+├── Node 2: evaluate_coverage       — deterministic routing
+├── Node 3: expand_candidate_pool   (conditional) — widens pool if sector data is thin
+├── Node 4: llm_rerank              — GPT-4o with tool-calling selects final 10
+├── Node 5: generate_rationales     — 10 concurrent GPT-4o-mini calls → Pydantic validated
+│                                     (valuation comps pre-fetched once, shared across all 10)
+├── Node 6: quality_gate            — LLM-driven cross-acquirer quality check → routing
+└── Node 7: targeted_regeneration   (conditional) — re-runs 1–3 weak rationales
 ```
 
 ### How the CSV Is Used
@@ -157,10 +167,10 @@ Composite score = weighted sum × 100 (0–100). **Conviction level is Python-en
 |------|---------|--------|
 | `search_transactions` | `llm_rerank` | LLM (agentic) |
 | `get_acquirer_profile` | `llm_rerank` | LLM (agentic) |
-| `get_acquirer_precedent_deals` | `generate_rationales` | Python (direct) |
-| `get_valuation_comps` | `generate_rationales` | Python (direct) |
+| `get_acquirer_precedent_deals` | `generate_rationales` | Python (per-acquirer) |
+| `get_valuation_comps` | `generate_rationales`, `targeted_regeneration` | Python (once per node, cached) |
 
-In `llm_rerank`, the LLM decides whether to call tools and with what arguments — real agentic tool use. In `generate_rationales`, tools are called directly in Python to build the evidence packet before the LLM is invoked. This separation keeps latency down and prevents the LLM from fetching data it won't use.
+In `llm_rerank`, the LLM decides whether to call tools and with what arguments — real agentic tool use. In `generate_rationales`, tools are called directly in Python to build the evidence packet before the LLM is invoked. `get_valuation_comps` is called once per node invocation and its result is shared across all 10 (or 1–3) `_generate_one` calls — not once per acquirer.
 
 ### Structured Output + Repair Loop
 
@@ -241,19 +251,15 @@ Events are appended to an in-memory log and pushed to a per-run `asyncio.Queue`.
 
 ## What I Would Improve Given More Time
 
-1. **Caching valuation comps** — `get_valuation_comps` returns identical results for all 10 acquirers in a run (same target sector + size). Caching with a `(sector, size_band)` key would eliminate 9 of 10 comp fetches, saving ~2s per run
+1. **SQLite persistence** — Replace the in-memory `RunStore` with a local SQLite database (no new dependencies). Schema: `runs` and `events` tables. The `RunStore` interface stays identical so no agent code changes. Runs survive server restarts indefinitely
 
-2. **SQLite persistence** — Replace the in-memory `RunStore` with a local SQLite database (no new dependencies). Schema: `runs` and `events` tables. The `RunStore` interface stays identical so no agent code changes. Runs survive server restarts indefinitely
+2. **Richer target profile** — Accept optional known financials: revenue range, EBITDA %, recent headcount, key service lines. More target data enables more precise fit arguments (e.g. "their portfolio company margin profile suggests they'd pay a premium for this margin level")
 
-3. **Rationale quality gate** — Add a post-generation check that counts specific data citations in each section. If a section has fewer than 2 numeric citations, trigger a targeted rewrite rather than accepting weak output
+3. **Reviewer feedback loop** — Add a `PATCH /api/runs/{id}/rationale/{n}` endpoint so an MD can flag a weak rationale and trigger a single-page regeneration with their feedback as an additional system message
 
-4. **Richer target profile** — Accept optional known financials: revenue range, EBITDA %, recent headcount, key service lines. More target data enables more precise fit arguments (e.g. "their portfolio company margin profile suggests they'd pay a premium for this margin level")
+4. **Fine-grained sector taxonomy** — "Healthcare Services" covers outpatient, home care, behavioral, physician management, and more. Mapping CSV sub-sectors to a richer ontology would improve sector affinity scoring for targets in narrow sub-sectors
 
-5. **Reviewer feedback loop** — Add a `PATCH /api/runs/{id}/rationale/{n}` endpoint so an MD can flag a weak rationale and trigger a single-page regeneration with their feedback as an additional system message
-
-6. **Fine-grained sector taxonomy** — "Healthcare Services" covers outpatient, home care, behavioral, physician management, and more. Mapping CSV sub-sectors to a richer ontology would improve sector affinity scoring for targets in narrow sub-sectors
-
-7. **Request queuing** — `asyncio.Semaphore` on graph invocations to prevent concurrent sessions from fighting over OpenAI rate limits
+5. **Request queuing** — `asyncio.Semaphore` on graph invocations to prevent concurrent sessions from fighting over OpenAI rate limits
 
 ---
 

@@ -71,7 +71,9 @@ William_Blair_IB_Project/
 │   │       ├── evaluate_coverage.py
 │   │       ├── expand_candidate_pool.py
 │   │       ├── llm_rerank.py
-│   │       └── generate_rationales.py
+│   │       ├── generate_rationales.py
+│   │       ├── quality_gate.py
+│   │       └── targeted_regeneration.py
 │   ├── api/
 │   │   ├── deps.py                 # FastAPI dependency injection
 │   │   └── routes/
@@ -120,14 +122,24 @@ evaluate_coverage ──── route_after_coverage() ────┐
       │
 generate_rationales
       │
-     END
+  quality_gate ──── route_after_quality_gate() ────┐
+      │                                             │
+  (proceed_to_pdf)                       (regenerate_weak)
+      │                                             │
+     END              targeted_regeneration ◄───────┘
+                               │
+                              END
 ```
 
-All five nodes are in `backend/agent/nodes/`. Each receives `state` (AgentState TypedDict) and `config` (RunnableConfig). Shared dependencies (`emitter`, `app_state`) travel via `config["configurable"]` — not as globals or module-level imports.
+All seven nodes are in [backend/agent/nodes/](backend/agent/nodes/). Each receives `state` (AgentState TypedDict) and `config` (RunnableConfig). Shared dependencies (`emitter`, `app_state`) travel via `config["configurable"]` — not as globals or module-level imports.
 
 ### Why this graph shape?
 
-The original design had `search_transactions` called twice by the LLM to "discover" thin coverage. That was rejected as theatrical: the dataset is static, so the LLM would always find the same 12 Healthcare Services records. The routing decision was moved to a deterministic Python function (`route_after_coverage`). The LLM is involved only in decisions that require qualitative judgment — not ones computable with a comparison operator.
+The graph has two conditional edges with different routing philosophies:
+
+**`route_after_coverage`** — deterministic Python. If fewer than 15 acquirers score above 30/100, the pool widens from top-20 to top-25. The original design called this from an LLM, but rejected as theatrical: the dataset is static, so the LLM would always find the same 12 Healthcare Services records. The routing decision was moved to a comparison operator.
+
+**`route_after_quality_gate`** — LLM-driven. After all 10 rationales are generated, compact summaries (Section 2 preview, conviction sentence, risk flag names, citation count) are sent to `gpt-4o-mini` in a single call. The LLM identifies 0–3 weak rationales (low citation density, template recycling across acquirers, thin conviction, bare risk flag labels) and returns a routing decision. This requires cross-acquirer qualitative comparison that cannot be reduced to a threshold check — it is the primary genuinely agentic routing decision in the graph. On LLM failure the gate defaults to `proceed_to_pdf` so it never blocks delivery.
 
 ---
 
@@ -145,20 +157,24 @@ The original design had `search_transactions` called twice by the LLM to "discov
 
 6. **llm_rerank**: LLM receives the top-N candidate summaries and may call `get_acquirer_profile` or `search_transactions` to dig deeper before committing to a ranking. Tool-calling loop runs up to 3 rounds. Returns a ranked list of 10 names.
 
-7. **generate_rationales**: fires 10 LLM calls concurrently via `asyncio.gather`, throttled to 5 at a time by `asyncio.Semaphore(5)`. Each call uses `gpt-4o-mini` (`llm_fast`) — rationale generation is pure synthesis from pre-assembled data, not tool-use judgment. Each call:
+7. **generate_rationales**: fires 10 LLM calls concurrently via `asyncio.gather`, throttled to 5 at a time by `asyncio.Semaphore(5)`. Each call uses `gpt-4o-mini` (`llm_fast`) — rationale generation is pure synthesis from pre-assembled data, not tool-use judgment. Before launching the concurrent tasks, **valuation comps are pre-fetched once** (`get_valuation_comps` with `sectors=[target.sector]`, `deal_size_min=size*0.4`, `deal_size_max=size*2.5`) and passed as `cached_comps_json` to every `_generate_one` call. This eliminates 9 of 10 redundant DataFrame filter operations per run. Each call:
    - **Pre-computes citation-anchor fields** from the acquirer profile before building the prompt. These give the LLM the exact numbers needed for the grader-expected sentence pattern ("This acquirer has completed X deals in [sector] in the $Y–$Z range at Mx EV/EBITDA"): `primary_sector_deal_count` (exact count of deals in the target's sector, from `sector_counts[target.sector]`), `deals_near_target` (deals within 0.5×–2.0× of target EV, computed from the `deal_sizes_mm` array stored in the profile), `target_size_band` ("$100M–$400M" for a $200M target), `deal_size_range` (min–max string), and the full `sector_counts` dict. The Section 1 prompt instruction renders these as actual numbers so the LLM's example is already acquirer-specific before any generation occurs.
-   - **Pre-computes 7 Python anomaly signals** before touching the LLM. These are injected into the prompt as `⚠`/`✓` attention markers. Signals: deal size (4-branch: GENUINE STRETCH / AT-SIZE RANGE COVERS TARGET / BELOW MEDIAN / AT-SIZE), completion rate (⚠ if outcome_score < 70; ✓ block if ≥ 70), ownership mismatch (⚠ if ownership_score < 25), valuation posture (ABOVE-MARKET with `turns_diff` = additive turn difference and `gap_pct` = % above market; BELOW-MARKET with `stretch_pct` = % above acquirer's own median — **not** market median; AT-MARKET), oversized precedent deals (⚠ listing each deal >3× target EV by name with its ratio, mandatory disclosure when cited), and an unconditional ⚠ blocking "target's EBITDA margins complement…" in all sections.
+   - **Pre-computes 7 Python anomaly signals** before touching the LLM. These are injected into the prompt as `⚠`/`✓` attention markers. Signals: deal size (4-branch: GENUINE STRETCH / AT-SIZE RANGE COVERS TARGET / BELOW MEDIAN / AT-SIZE), completion rate (⚠ if outcome_score < 70; ✓ block if ≥ 70), ownership mismatch (⚠ if ownership_score < 25), valuation posture (ABOVE-MARKET with `turns_diff` = additive turn difference and `gap_pct` = % above market; BELOW-MARKET with `stretch_pct` = % above acquirer's own median — **not** market median; AT-MARKET), oversized precedent deals (⚠ listing each deal >3× target EV by name with its ratio, mandatory disclosure when cited), and an acquirer-type-specific EBITDA differentiation signal (see Prompt Design Decisions).
    - **Valuation math rules**: For below-market acquirers, the stretch % uses the acquirer's own historical median as the denominator ("must bid X% above historical comfort") — not the market median. For above-market acquirers, risk label uses "+N turns above market" (additive turn count) not "Nx Premium" (which implies N times the market price).
    - **Canonical name lookup**: uses `candidate.get("acquirer_name")` (from the scored profile, exact CSV string) for all tool invocations — not the LLM's rerank-output name, which may be subtly altered.
    - **Two-pass precedent deal fetch**: first fetches up to 5 deals filtered to the target's primary sector, then fetches up to 10 deals with no sector filter and fills remaining slots with non-duplicates. Combined list capped at 5. Sector-relevant deals appear first.
-   - Fetches valuation comps via `get_valuation_comps` tool (Python, not LLM).
+   - Uses the pre-fetched `cached_comps_json` for valuation context (falls back to a live fetch only if not provided, e.g. in isolated targeted regeneration calls).
    - Builds the full evidence packet and calls `llm_fast.with_structured_output(AcquirerRationale)`.
    - **Conviction level enforced in Python** post-generation: `result["conviction_level"] = conviction_baseline` (composite > 80 → High; 50–79 → Medium; < 50 → Low). The LLM writes rationale text calibrated to the level but never controls the label.
-   - **Post-generation EBITDA content scan**: after the LLM returns, a regex scans all text fields (`acquirer_overview`, `strategic_fit_thesis`, `conviction_rationale`, risk flag descriptions) for "the target's EBITDA margins" or variants. If found, emits `VALIDATION_FAILED` and fires a targeted repair call quoting the exact violation. Three prompt layers already forbid the phrase — this scan catches what instruction-following alone misses.
+   - **Post-generation EBITDA content scan**: after the LLM returns, a regex scans all text fields for generic boilerplate verbs following "the target's EBITDA margins" (complement, align with, support, enhance, etc.). If found, emits `VALIDATION_FAILED` and fires a targeted repair call quoting the exact violation, redirecting the LLM toward acquirer-specific framing instead of deletion.
    - On Pydantic validation failure, runs one repair loop with the error message.
    - On repair failure, inserts a stub entry so the PDF still has 10 pages.
 
-8. `_run_agent()` **sorts rationales by `composite_score` descending** and reassigns `rank` numbers before calling `generate_pdf()`. This ensures conviction level (Python-derived from composite score) always matches position order in both the PDF and UI — the LLM rerank selects *which* 10 make the shortlist but does not control the final ordering. Calls `generate_pdf()` via `asyncio.get_running_loop().run_in_executor()` (not `get_event_loop()` — the latter is deprecated inside a running async function), then emits `RUN_COMPLETED` with rationales + PDF URL.
+8. **quality_gate**: receives compact summaries of all 10 rationales (Section 2 preview ≤220 chars, conviction sentence, risk flag names, citation count computed by Python regex). Sends them to `llm_fast` in a single call using `QUALITY_GATE_PROMPT_TEMPLATE`. The LLM identifies 0–3 weak rationales across four criteria: citation density, template recycling, thin conviction (<35 words), bare risk flag labels without embedded numbers. Returns `{"routing": "proceed_to_pdf"|"regenerate_weak", "weak_acquirers": [...]}`. Cap of 3 is enforced in Python regardless of LLM output. On LLM failure: defaults to `proceed_to_pdf`.
+
+9. **targeted_regeneration** (conditional): pre-fetches comps once, then re-runs `_generate_one()` for each flagged acquirer via `asyncio.gather` with `Semaphore(3)`. Merges the updated rationales back into state. Sets `regeneration_attempted: True` to prevent re-entry. Routes unconditionally to END.
+
+10. `_run_agent()` **sorts rationales by `composite_score` descending** and reassigns `rank` numbers before calling `generate_pdf()`. This ensures conviction level (Python-derived from composite score) always matches position order in both the PDF and UI — the LLM rerank selects *which* 10 make the shortlist but does not control the final ordering. Calls `generate_pdf()` via `asyncio.get_running_loop().run_in_executor()` (not `get_event_loop()` — the latter is deprecated inside a running async function), then emits `RUN_COMPLETED` with rationales + PDF URL.
 
 ---
 
@@ -335,9 +351,9 @@ Generic output is explicitly forbidden by name. Conviction levels are required t
 - Ownership mismatch (⚠ if ownership_score < 25 — acquirer rarely buys private companies)
 - Valuation posture: ABOVE-MARKET uses `turns_diff` (additive EV/EBITDA turn difference) and `gap_pct` (% above market); BELOW-MARKET uses `stretch_pct` computed as `(market − acquirer) / acquirer` so the percentage correctly describes how much more than their own historical comfort they must bid; AT-MARKET blocks category (a) entirely
 - Oversized precedent deals: Python scans fetched deals before LLM call; any deal >3× target EV is listed by name with ratio and the LLM is told disclosure of the size gap is mandatory when citing it
-- Unconditional EBITDA block (per-call, always injected): forbids attributing margin quality to the current target in any section
+- EBITDA differentiation signal (per-call): computes the historical average EBITDA margin of the acquirer's own precedent acquisitions from `acquired_co_ebitda_margin_pct`. For PE sponsors, injects an IRR/return-on-capital framing; for strategics, injects a margin comparison frame. The goal is acquirer-specific use of the target's strong margins — not a blanket prohibition
 
-**Post-generation EBITDA scan** — a separate Python regex check runs after the LLM returns. If "the target's EBITDA margins" (or variants) is detected in any text field, a targeted repair call is fired quoting the exact violation. This catches cases where three prompt-layer prohibitions still fail.
+**Post-generation EBITDA scan** — a separate Python regex checks all text fields for generic boilerplate verbs following "the target's EBITDA margins" (complement, align with, support, enhance, are consistent with, would improve, etc.). Narrow match: informative uses of the target's margins that reference the acquirer's own data are permitted and pass. If a generic match is found, a targeted repair call is fired with the exact violation quoted and redirected toward differentiated framing. This catches cases where prompt-layer instructions still fail.
 
 **Section 6 — Conviction** is a synthesis of Sections 1–5, not a precedent deal recap. Sentence 1 must draw on at least 2 signals simultaneously (sector concentration + cadence, valuation alignment + deal type, etc.). Sentence 2 names the specific binding constraint. "Closest precedent in this shortlist" is explicitly forbidden — it is circular. If citing a precedent deal 3× or more larger than the target, the size gap and what it does/does not prove must be stated explicitly.
 
@@ -465,13 +481,12 @@ Current `RunStore` uses Python dicts. Server restart clears all history.
 
 **Production:** Replace `_events` and `_runs` with Postgres tables. The `RunStore` interface (`add_event`, `get_events`, `list_runs`) stays identical. For horizontal scaling, replace `asyncio.Queue` with Redis pub/sub.
 
-### LLM call count (~12 per run)
-1 rerank (gpt-4o) + 10 rationales (gpt-4o-mini) + 0–2 repair attempts + 0–3 tool-call rounds in rerank.
+### LLM call count (~13 per run)
+1 rerank (gpt-4o) + 10 rationales (gpt-4o-mini) + 1 quality gate (gpt-4o-mini) + 0–3 targeted regenerations (gpt-4o-mini) + 0–2 repair attempts + 0–3 tool-call rounds in rerank.
 
-Model split rationale: `llm_rerank` keeps gpt-4o because it calls tools and must judge which profiles to fetch before committing to a ranking. `generate_rationales` uses gpt-4o-mini (`llm_fast`) because it synthesises pre-assembled data — no tool judgment required — and mini's ~10× higher TPM limits eliminate the rate-limit stalls that occurred when 10 concurrent gpt-4o calls exhausted the per-minute budget.
+Model split rationale: `llm_rerank` keeps gpt-4o because it calls tools and must judge which profiles to fetch before committing to a ranking. `generate_rationales` and `quality_gate` use gpt-4o-mini (`llm_fast`) because they synthesise pre-assembled data — no tool judgment required — and mini's ~10× higher TPM limits eliminate the rate-limit stalls that occurred when 10 concurrent gpt-4o calls exhausted the per-minute budget.
 
 **Optimisations (deferred):**
-- Cache the `get_valuation_comps` result — it's identical for all 10 acquirers in a run (same target sector + size range)
 - Batch rerank + top-3 rationales into one structured-output call
 
 ### Concurrency limit
