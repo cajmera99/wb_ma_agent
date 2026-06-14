@@ -357,6 +357,18 @@ No sentence may be the last sentence if it contains no data. \
 When arguing size fit, cite {deals_near_target} deals in the {target_size_band} band \
 and the acquirer's median of ${median_deal_size_mm}M — not the overall range alone.
 
+FINANCIAL SPONSOR — FIRST SENTENCE RULE (mandatory if acquirer_type = Financial Sponsor):
+Multiple Financial Sponsors appear in this shortlist. Your Section 2 FIRST SENTENCE \
+must be unique to {acquirer_name} — do not open with "Since their [year] platform \
+acquisition, [Acquirer] has added [N] bolt-ons" if that skeleton would describe another \
+sponsor equally. Lead instead with the single most distinctive numeric fact about THIS \
+sponsor from the data above: their sub-sector concentration from sub_sector_counts, \
+their deal size calibration relative to this target, their bolt-on cadence RATE \
+(deals per year since platform), or their geographic pattern. The platform year and \
+bolt-on count can appear in sentence 2 if sentence 1 uses a different differentiator. \
+The first 220 characters of Section 2 will be reviewed for citation density — ensure \
+at least 2 specific numbers appear in that opening window.
+
 SECTION 3 — PRECEDENT ACTIVITY
 List all deals from the precedent data provided (up to 5 shown, \
 sector-relevant first). For each deal state: target company, sector, \
@@ -555,9 +567,14 @@ QUALITY CRITERIA — flag a rationale as weak ONLY if it clearly fails one of th
    generic boilerplate — no acquirer-specific argument, no named deals, no sub-sector \
    claims (e.g. "X is well-positioned to leverage synergies in healthcare..." with no data).
 
-2. TEMPLATE RECYCLING: Two or more rationales share nearly identical Section 2 opening \
-   constructions or the same key phrase repeated across acquirers. Flag the weakest \
-   duplicate — not all of them.
+2. TEMPLATE RECYCLING: Two or more rationales share a structurally identical FIRST \
+   SENTENCE (same grammatical skeleton with different names substituted — not just \
+   similar topic). Flag only ONE — the one with the fewest data citations in its preview. \
+   Important: Financial Sponsors necessarily share exit thesis language (IRR framing, \
+   platform-build logic, strategic exit buyer) — this is structural and expected. Do NOT \
+   flag PE sponsors for sharing exit thesis structure. Only flag a PE sponsor under this \
+   criterion if its Section 2 OPENING sentence (before any exit discussion) is \
+   structurally identical to another sponsor's opening sentence.
 
 3. THIN CONVICTION: The conviction_rationale is under 35 words, or both sentences are \
    generic with no specific numbers and no acquirer-differentiating claim.

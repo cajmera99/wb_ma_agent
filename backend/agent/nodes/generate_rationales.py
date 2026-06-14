@@ -663,10 +663,10 @@ async def node_generate_rationales(state: AgentState, config: RunnableConfig) ->
         except Exception as e:
             logger.warning("valuation_comps_prefetch_failed", error=str(e))
 
-    # Semaphore(5): gpt-4o-mini has ~10× higher TPM limits than gpt-4o so rate-limit
-    # stalls are no longer a concern. 5 concurrent calls keeps total rationale time
-    # to ~2 batches (~15-20s) without hitting mini's generous per-minute budget.
-    sem = asyncio.Semaphore(5)
+    # Semaphore(10): run all 10 calls in a single batch. gpt-4o-mini's TPM limit is
+    # high enough that 10 concurrent calls do not trigger rate-limit backoff at Tier 1.
+    # Dropping to 5 added ~8-10s by forcing two sequential batches — not worth it.
+    sem = asyncio.Semaphore(10)
 
     async def _throttled(name: str, rank: int, candidate: dict):
         async with sem:
