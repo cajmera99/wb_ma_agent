@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+
+# Node
+frontend/node_modules/
+frontend/dist/
+
+# Environment and secrets
+.env
+*.env
+
+# Generated PDF output (mount a volume at /app/backend/output in prod)
+backend/output/
+
+# Dev tooling
+.git/
+.gitignore
+*.md
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
