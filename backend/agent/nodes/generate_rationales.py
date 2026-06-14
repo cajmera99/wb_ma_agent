@@ -137,9 +137,15 @@ async def _generate_one(
             )
         else:
             # Ratio between 0.5x and 1.5x — sizes are close enough to be immaterial.
+            _at_size_dir = "LARGER than" if size_ratio > 1.0 else "SMALLER than"
+            _at_size_pct = abs(size_ratio - 1.0) * 100
             anomaly_parts.append(
                 f"⚠ AT-SIZE DEAL: Target EV ${target.deal_size_mm:.0f}M vs acquirer median "
                 f"${median_size:.0f}M = {size_ratio:.2f}x ratio (within 0.5-1.5x normal band). "
+                f"DIRECTION: The target is {_at_size_dir} this acquirer's median "
+                f"({_at_size_pct:.0f}% difference). "
+                f"If ratio > 1.0 the target is LARGER; if < 1.0 it is SMALLER. "
+                f"Never invert this when comparing sizes in Section 2. "
                 f"Do NOT use category (b) Deal Size Mismatch in Section 5 — this is not a "
                 f"material risk. Choose from (c), (d), (e), (f), (g), or (h) instead."
             )
@@ -277,6 +283,44 @@ async def _generate_one(
     except Exception:
         pass
 
+    # Pre-compute withdrawn/terminated deal names from the fetched 5-deal sample.
+    # The completion rate signal (above) tells the LLM to cite withdrawn deals by name;
+    # without providing the exact names the LLM fabricates them — sometimes misattributing
+    # Closed deals as withdrawn (Welsh Carson, Nordic Capital) or producing internal
+    # contradictions ("6 Withdrawn Deals — None in dataset", VNS Health).
+    _withdrawn_deal_names: list[str] = []
+    try:
+        _pd_for_wdraw = json.loads(precedent_deals_json)
+        for _wd in _pd_for_wdraw.get("deals", []):
+            if _wd.get("outcome") in ("Withdrawn", "Terminated"):
+                _wn = _wd.get("target_company", "Unknown")
+                _wy = _wd.get("year", "?")
+                _withdrawn_deal_names.append(f"{_wn} ({_wy})")
+    except Exception:
+        pass
+
+    if _withdrawn_deal_names:
+        anomaly_parts.append(
+            "⚠ WITHDRAWN/TERMINATED DEALS IN YOUR PRECEDENT DATA — EXACT NAMES (USE THESE ONLY):\n"
+            + "\n".join(f"  - {n}" for n in _withdrawn_deal_names) + "\n"
+            "When writing risk flag category (d) in Section 5, cite ONLY the names above. "
+            "Every other deal in the precedent JSON shows 'Closed' as its outcome — "
+            "NEVER describe a Closed deal as 'withdrawn pre-close'. Never invent a deal "
+            "name that does not appear in this list. Fabricating a withdrawn deal name "
+            "when the precedent JSON shows it as Closed is a critical factual error that "
+            "will be flagged."
+        )
+    else:
+        anomaly_parts.append(
+            "⚠ WITHDRAWN DEALS: Zero of the 5 precedent deals shown have a Withdrawn or "
+            "Terminated outcome — ALL are Closed. Do NOT write risk flag category (d) with "
+            "any specific deal names, because no withdrawn deals appear in your precedent data. "
+            "If the completion rate signal above indicates non-closed deals exist in the "
+            "broader dataset (beyond the 5 shown), acknowledge the aggregate count only — "
+            "e.g. 'X of Y total deals were not completed' — but NEVER invent a deal name "
+            "to populate category (d). A fabricated withdrawn deal name is a factual error."
+        )
+
     # EBITDA margin differentiation signal — computed here so we can reference the
     # historical acquisition margin profile from the fetched precedent deals.
     # "Strong EBITDA margins" is real information; the goal is to force acquirer-specific
@@ -400,6 +444,22 @@ async def _generate_one(
                 f"risk flag — skip it and use categories (g) Antitrust or (h) Competitive "
                 f"Process instead. Do not reference {mkt_str} as a stretch or premium."
             )
+
+    # Zero-tolerance signal for the two highest-frequency forbidden filler phrases.
+    # Instruction-only prohibition in the prompt is insufficient — the LLM skims
+    # long forbidden lists and reverts to templates. A pre-computed ⚠ signal
+    # immediately before the output task forces explicit attention before writing.
+    anomaly_parts.append(
+        "⚠ ZERO-TOLERANCE PHRASES — POST-GENERATION SCAN ACTIVE (triggers rewrite):\n"
+        "  • 'fills a [critical/specific/key/strategic/unique] gap' → INSTEAD: name the "
+        "exact sub-sector from sub_sector_counts that this target adds and the specific "
+        "reason THIS acquirer needs it — not any generic gap claim\n"
+        "  • 'positions them [to/well/as/uniquely]' / 'positions this acquirer' / "
+        f"'positions {acquirer_name}' → INSTEAD: state what the data shows they can do "
+        "with a specific number (deal count, size, sub-sector concentration)\n"
+        "Both phrases are connective filler that signal missing analysis. Replace with "
+        "the specific numbers from sub_sector_counts, deal_type_counts, or precedent data."
+    )
 
     # Assemble the complete anomaly flags block now that all signals are computed.
     anomaly_flags = (
@@ -551,9 +611,16 @@ async def _generate_one(
     # [strong] EBITDA margins complement/align with/support/enhance..." — not on any
     # mention of the target's margins, which is now encouraged with acquirer-specific framing.
     _ebitda_re = re.compile(
+        # Pattern 1: "the/this target's [strong] EBITDA margins [verb]"
+        # Adds will/can/should alongside existing would, and more verb stems.
         r"(?:the|this)\s+target'?s\s+(?:strong\s+)?ebitda\s+margins?\s+"
         r"(?:complement|align\s+with|support|enhance|are\s+consistent\s+with"
-        r"|would\s+improve|would\s+support|are\s+attractive|are\s+aligned)",
+        r"|(?:would|will|can|should)\s+(?:improve|support|enhance|align|complement"
+        r"|benefit|strengthen|underpin|make|help|drive|allow|enable))"
+        # Pattern 2: "the/this target's strong margins [verb]" (EBITDA keyword absent)
+        r"|(?:the|this)\s+target'?s\s+strong\s+margins?\s+"
+        r"(?:complement|align\s+with|support|enhance|are\s+consistent\s+with"
+        r"|(?:would|will|can|should)\s+\w+)",
         re.IGNORECASE,
     )
     _scan_text = " ".join(filter(None, [
@@ -600,6 +667,61 @@ async def _generate_one(
         except Exception as _ebitda_repair_err:
             logger.error("ebitda_repair_failed", acquirer=acquirer_name, error=str(_ebitda_repair_err))
             # Keep original result — better than a stub
+
+    # Post-generation scan for high-frequency filler phrases.
+    # "fills a [adjective] gap" and "positions them/this acquirer" appear on 8-9 of 10
+    # pages because the LLM treats them as connective tissue despite the pre-prompt signal.
+    # Running a repair here catches what the anomaly injection misses.
+    _acquirer_name_escaped = re.escape(acquirer_name)
+    _forbidden_phrase_re = re.compile(
+        r"fills?\s+a\s+(?:critical|specific|key|strategic|unique|significant|important"
+        r"|clear|real|natural|notable|distinct|meaningful|niche|defined)\s+(?:\w+\s+)?gap"
+        r"|positions?\s+(?:them|this\s+acquirer|this\s+(?:firm|buyer|fund|company|sponsor)"
+        r"|" + _acquirer_name_escaped + r")",
+        re.IGNORECASE,
+    )
+    _forbidden_scan_fields = " ".join(filter(None, [
+        result.get("acquirer_overview", ""),
+        result.get("strategic_fit_thesis", ""),
+        result.get("conviction_rationale", ""),
+    ] + [rf.get("description", "") for rf in result.get("risk_flags", []) if isinstance(rf, dict)]))
+
+    _forbidden_match = _forbidden_phrase_re.search(_forbidden_scan_fields)
+    if _forbidden_match:
+        _matched_phrase = _forbidden_match.group(0)
+        logger.warning("forbidden_filler_phrase_detected", acquirer=acquirer_name, phrase=_matched_phrase)
+        emitter.emit(EventType.VALIDATION_FAILED, node="generate_rationales", data={
+            "acquirer": acquirer_name, "error": "forbidden_filler_phrase_detected"
+        })
+        _phrase_repair_msg = HumanMessage(content=(
+            f"CONTENT VIOLATION — your response contains a forbidden filler phrase: "
+            f'"{_matched_phrase}"\n\n'
+            "Replace it with a data-specific alternative:\n"
+            "  • 'fills a [adjective] gap' → name the exact sub-sector from sub_sector_counts "
+            "this target adds, and the specific competitive reason THIS acquirer needs it\n"
+            "  • 'positions them/this acquirer/[name] [to/well/as]' → state the direct "
+            "implication from the data — cite a specific deal count, size calibration, or "
+            "sub-sector fact without the transitional filler phrase\n\n"
+            "Produce a corrected full response — all other sections unchanged. "
+            "Do NOT introduce any other forbidden phrases in the correction."
+        ))
+        try:
+            _phrase_repaired = await _call_structured_with_retry(
+                llm_structured, messages + [_phrase_repair_msg]
+            )
+            emitter.emit(EventType.VALIDATION_REPAIRED, node="generate_rationales", data={
+                "acquirer": acquirer_name
+            })
+            logger.info("forbidden_phrase_repair_succeeded", acquirer=acquirer_name)
+            _pr = _phrase_repaired.model_dump()
+            _pr["rank"] = rank
+            _pr["sub_scores"] = sub_scores
+            _pr["composite_score"] = candidate.get("composite_score", _pr.get("composite_score", 0))
+            _pr["conviction_level"] = conviction_baseline
+            result = _pr
+        except Exception as _phrase_repair_err:
+            logger.error("forbidden_phrase_repair_failed", acquirer=acquirer_name, error=str(_phrase_repair_err))
+            # Keep original — better than a stub
 
     return result
 

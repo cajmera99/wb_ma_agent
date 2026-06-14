@@ -87,7 +87,11 @@ function formatEvent(evt) {
   if (type === 'node.completed' && node.includes('rerank')) return `${node}Final 10: ${(d.final_acquirers || []).join(', ')}`
   if (type === 'node.completed' && node.includes('rationale')) return `${node}${d.rationales_generated} generated, ${d.rationales_failed} failed`
   if (type === 'validation.failed') {
-    const reason = d.error === 'forbidden_ebitda_attribution_detected'
+    const contentViolations = [
+      'forbidden_ebitda_attribution_detected',
+      'forbidden_filler_phrase_detected',
+    ]
+    const reason = contentViolations.includes(d.error)
       ? 'content violation detected — re-generating'
       : `schema error — re-generating (${(d.error || '').slice(0, 50)})`
     return `${node}${d.acquirer ? d.acquirer + ': ' : ''}${reason}`
