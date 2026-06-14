@@ -184,9 +184,10 @@ async def view_graph():
       background: #f7f9fc;
       border-radius: 0 6px 6px 0;
     }
-    .node.router { border-left-color: #7c3aed; background: #faf5ff; }
-    .node.tool    { border-left-color: #d97706; background: #fffbeb; }
-    .node.llm     { border-left-color: #0ea5e9; background: #f0f9ff; }
+    .node.router    { border-left-color: #7c3aed; background: #faf5ff; }
+    .node.tool      { border-left-color: #d97706; background: #fffbeb; }
+    .node.llm       { border-left-color: #0ea5e9; background: #f0f9ff; }
+    .node.llmrouter { border-left-color: #059669; background: #f0fdf4; }
     .node-name {
       font-size: 12px;
       font-weight: 700;
@@ -267,7 +268,11 @@ flowchart TD
 
     D["🤖  llm_rerank\n─────────────────\nLLM selects final 10\nwith tool-calling loop\n(up to 3 rounds)"]:::llm
 
-    E["✍  generate_rationales\n─────────────────\n10 LLM calls, 3 at a time\n(Semaphore throttle)\nStructured output +\nrepair loop"]:::llm
+    E["✍  generate_rationales\n─────────────────\n10 concurrent gpt-4o-mini\ncalls · comps cached once\nStructured output +\nrepair loop"]:::llm
+
+    F["🔬  quality_gate\n─────────────────\nLLM cross-acquirer\nquality check — routes\nto regen if 1–3 weak"]:::llmrouter
+
+    G["🔄  targeted_regeneration\n─────────────────\nRe-runs weak rationales\n(Semaphore 3) then END"]:::llm
 
     START --> A
     A --> B
@@ -275,18 +280,23 @@ flowchart TD
     B -->|"thin coverage"| C
     C --> D
     D --> E
-    E --> END_
+    E --> F
+    F -->|"quality acceptable"| END_
+    F -->|"1–3 weak rationales"| G
+    G --> END_
 
     classDef startend fill:#1a202c,stroke:#1a202c,color:#fff,rx:20
-    classDef pure    fill:#003087,stroke:#001a4d,color:#fff
-    classDef router  fill:#7c3aed,stroke:#5b21b6,color:#fff
-    classDef llm     fill:#0ea5e9,stroke:#0284c7,color:#fff
+    classDef pure      fill:#003087,stroke:#001a4d,color:#fff
+    classDef router    fill:#7c3aed,stroke:#5b21b6,color:#fff
+    classDef llm       fill:#0ea5e9,stroke:#0284c7,color:#fff
+    classDef llmrouter fill:#059669,stroke:#047857,color:#fff
     </div>
 
     <div class="legend">
       <div class="legend-item"><div class="legend-dot" style="background:#003087"></div>Pure Python node</div>
-      <div class="legend-item"><div class="legend-dot" style="background:#7c3aed"></div>Routing decision</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#7c3aed"></div>Deterministic router</div>
       <div class="legend-item"><div class="legend-dot" style="background:#0ea5e9"></div>LLM node</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#059669"></div>LLM-driven router</div>
     </div>
   </div>
 
@@ -352,21 +362,61 @@ flowchart TD
           throttled to 5 at a time by <code>asyncio.Semaphore(5)</code>. Mini's
           ~10× higher TPM limits over gpt-4o eliminate rate-limit stalls; pure
           synthesis from pre-assembled data requires no tool-use judgment.<br/><br/>
-          Before each call, Python pre-computes <strong>6 anomaly signals</strong>
-          injected as ⚠/✓ attention markers: deal size routing (4 branches),
-          completion rate gate, ownership mismatch, valuation posture with
-          pre-computed premium, EBITDA margin attribution block, and co-acquirer
-          exit buyer list for PE sponsors. Conviction level is enforced in Python
-          post-generation — the LLM writes text calibrated to the level but never
-          controls the label.<br/><br/>
+          <strong>Valuation comps are pre-fetched once</strong> before the gather
+          and passed as <code>cached_comps_json</code> to every call — identical
+          for all acquirers in a run, so 9 of 10 DataFrame filter operations are
+          eliminated.<br/><br/>
+          Before each call, Python pre-computes <strong>7 anomaly signals</strong>
+          injected as ⚠/✓ markers: deal size routing (4 branches), completion
+          rate gate, ownership mismatch, valuation posture with pre-computed turn
+          counts, oversized precedent deal disclosures, acquirer-type EBITDA
+          differentiation signal (PE → IRR framing; Strategic → margin comparison),
+          and co-acquirer exit buyer list for PE sponsors. Conviction level is
+          enforced in Python post-generation — the LLM writes text calibrated to
+          the level but never controls the label.<br/><br/>
           Evidence packet: full acquirer profile, sub-sector counts, platform
           cadence, two-pass precedent deal fetch (up to 5, sector-first), and
           market valuation comps. Returns a validated
-          <code>AcquirerRationale</code> Pydantic object with one automated repair
-          attempt on validation failure.
+          <code>AcquirerRationale</code> Pydantic object with repair loops for
+          schema violations and generic EBITDA boilerplate.
         </div>
         <div class="tools-used">
-          Tools: <span>get_acquirer_precedent_deals</span><span>get_valuation_comps</span>
+          Tools: <span>get_acquirer_precedent_deals</span><span>get_valuation_comps</span> (cached)
+        </div>
+      </div>
+
+      <div class="node router" style="border-left-color:#059669;background:#f0fdf4;">
+        <div class="node-tag" style="background:#dcfce7;color:#166534;">LLM-Driven Router</div>
+        <div class="node-name">quality_gate</div>
+        <div class="node-desc">
+          The primary LLM-driven conditional edge in the graph. Sends compact
+          summaries of all 10 rationales (Section 2 preview ≤220 chars, conviction
+          sentence, risk flag names, Python-computed citation count) to
+          <strong>gpt-4o-mini</strong> in a single call.<br/><br/>
+          Flags 0–3 weak rationales across four criteria: citation density (&lt;2
+          data points in Section 2), template recycling across acquirers, thin
+          conviction (&lt;35 words), bare risk flag labels with no embedded numbers.
+          Cap of 3 is enforced in Python regardless of LLM output.<br/><br/>
+          Routes to <strong>targeted_regeneration</strong> if any are flagged;
+          otherwise to END. On LLM failure defaults to proceed — the gate never
+          blocks PDF delivery.
+        </div>
+      </div>
+
+      <div class="node llm">
+        <div class="node-tag tag-llm">LLM · Conditional</div>
+        <div class="node-name">targeted_regeneration</div>
+        <div class="node-desc">
+          Re-runs <code>_generate_one()</code> for the 1–3 flagged acquirers via
+          <code>asyncio.gather</code> with <code>Semaphore(3)</code>. Uses the same
+          evidence assembly, anomaly signals, and repair loop as the original node.
+          Valuation comps are pre-fetched once here as well.<br/><br/>
+          Merges updated rationales back into state, sets
+          <code>regeneration_attempted: True</code> to prevent re-entry, then
+          routes unconditionally to END.
+        </div>
+        <div class="tools-used">
+          Tools: <span>get_acquirer_precedent_deals</span><span>get_valuation_comps</span> (cached)
         </div>
       </div>
 
