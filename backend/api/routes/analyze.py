@@ -124,9 +124,17 @@ async def _run_agent(
         final_state = await compiled_graph.ainvoke(initial_state, config=run_config)
         log.info("agent_run_complete", acquirers=final_state.get("final_acquirer_names"))
 
-        # Generate the PDF and store the path
-        rationales = final_state.get("rationales", [])
-        pdf_path = await asyncio.get_event_loop().run_in_executor(
+        # Sort by composite score so conviction level always matches rank order,
+        # then reassign rank numbers to match the sorted positions.
+        rationales = sorted(
+            final_state.get("rationales", []),
+            key=lambda r: -r.get("composite_score", 0),
+        )
+        for i, r in enumerate(rationales):
+            r["rank"] = i + 1
+
+        loop = asyncio.get_running_loop()
+        pdf_path = await loop.run_in_executor(
             None, generate_pdf, run_id, target, rationales
         )
 
