@@ -201,6 +201,14 @@ export default function App() {
           )}
         </main>
       </div>
+
+      <footer style={{
+        textAlign: 'center', padding: '10px 32px',
+        fontSize: 10, color: '#a0aec0', letterSpacing: 0.3,
+        borderTop: '1px solid #e2e8f0',
+      }}>
+        {`v${__APP_VERSION__} · built ${new Date(__BUILD_TIME__).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}`}
+      </footer>
     </div>
   )
 }
