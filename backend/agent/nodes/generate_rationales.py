@@ -1,5 +1,6 @@
 import asyncio
 import json
+import re
 from pydantic import ValidationError
 from tenacity import retry, stop_after_attempt, wait_exponential
 from langchain_core.messages import SystemMessage, HumanMessage
@@ -43,6 +44,33 @@ async def _generate_one(
     sub_scores = candidate.get("sub_scores", {})
     acquirer_type_raw = candidate.get("acquirer_type", "Strategic")
     acquirer_type = _normalize_acquirer_type(acquirer_type_raw)
+
+    # ── Sector-specific deal count ─────────────────────────────────────────────
+    # sector_counts is a dict like {"Healthcare Services": 6, "Behavioral Health": 2}.
+    # Passing only sub_sector_counts previously made it impossible for the LLM to
+    # write "completed 6 Healthcare Services deals" — we had no sector-level count.
+    primary_sector_deal_count = candidate.get("sector_counts", {}).get(target.sector, 0)
+
+    # ── Deal size range ────────────────────────────────────────────────────────
+    # Min-max range across ALL deals. "Typical range: $50M–$800M" is meaningful
+    # context the LLM can use without needing individual deal sizes.
+    _min_sz = candidate.get("min_deal_size_mm")
+    _max_sz = candidate.get("max_deal_size_mm")
+    deal_size_range = (
+        f"${_min_sz:.0f}M–${_max_sz:.0f}M"
+        if _min_sz is not None and _max_sz is not None
+        else "N/A"
+    )
+
+    # ── Deals near target EV ───────────────────────────────────────────────────
+    # Count deals that fall within 0.5x–2.0x of the target EV. For a $200M target
+    # this is $100M–$400M. Enables "N deals in the comparable size range" sentences
+    # without fabricating a range the data doesn't support.
+    _deal_sizes = candidate.get("deal_sizes_mm", [])
+    _band_low = target.deal_size_mm * 0.5
+    _band_high = target.deal_size_mm * 2.0
+    deals_near_target = sum(1 for s in _deal_sizes if _band_low <= s <= _band_high)
+    target_size_band = f"${_band_low:.0f}M–${_band_high:.0f}M"
 
     # Compute a conviction baseline in Python so the LLM has a principled anchor.
     # Without this, similar composite scores produce inconsistent conviction levels
@@ -229,6 +257,34 @@ async def _generate_one(
         except Exception as e:
             logger.warning("precedent_deals_fetch_failed", acquirer=canonical_name, error=str(e))
 
+    # Flag any precedent deal >3x the target EV so the LLM must acknowledge the size
+    # gap explicitly when citing these deals, rather than silently using a $4B deal
+    # as evidence of readiness for a $200M target.
+    try:
+        _deals_parsed = json.loads(precedent_deals_json)
+        _oversized = []
+        for _deal in _deals_parsed.get("deals", []):
+            _sz = _deal.get("deal_size_mm")
+            if _sz and _sz > target.deal_size_mm * 3:
+                _ratio = _sz / target.deal_size_mm
+                _oversized.append(
+                    f"  - {_deal.get('target_company', 'Unknown')} "
+                    f"(${_sz:.0f}M = {_ratio:.1f}x the ${target.deal_size_mm:.0f}M target)"
+                )
+        if _oversized:
+            anomaly_parts.append(
+                "⚠ OVERSIZED PRECEDENTS — MANDATORY DISCLOSURE WHEN CITED:\n"
+                + "\n".join(_oversized) + "\n"
+                f"If ANY of the above deals appear in Section 2 or Section 6 as evidence "
+                f"of fit for the ${target.deal_size_mm:.0f}M target, you MUST state: "
+                f"(1) the exact size ratio, and (2) what it proves vs. does NOT prove. "
+                f"Example: 'Their $Xm deal proves they can execute a complex process, "
+                f"but does not validate size discipline at the ${target.deal_size_mm:.0f}M level.' "
+                "Citing an oversized deal without this disclosure is a reportable failure."
+            )
+    except Exception:
+        pass
+
     # Step 2: Fetch market valuation comps for the target sector + size range
     comps_tool = tool_map.get("get_valuation_comps")
     valuation_comps_json = "{}"
@@ -255,24 +311,34 @@ async def _generate_one(
         market_median_ebitda = None
 
     if acquirer_median_ebitda and market_median_ebitda:
+        # gap_pct: % difference relative to market median — used for threshold checks
+        # and the "above-market" description (market is the reference base there).
         gap_pct = (acquirer_median_ebitda - market_median_ebitda) / market_median_ebitda * 100
         acq_str = f"{acquirer_median_ebitda:.1f}x"
         mkt_str = f"{market_median_ebitda:.1f}x"
-        premium_x = round(acquirer_median_ebitda - market_median_ebitda, 1)
+        # turns_diff: additive difference in EV/EBITDA multiples. "+4.5 turns above market"
+        # is standard banker language. "4.5x Premium" was ambiguous — "x" suffix implies a
+        # multiplier (paying 4.5 TIMES the market price), not an additive turn difference.
+        turns_diff = round(acquirer_median_ebitda - market_median_ebitda, 1)
         if gap_pct > 15:
-            # Pre-compute the premium multiple so the LLM never guesses it.
             anomaly_parts.append(
                 f"⚠ ABOVE-MARKET PAYER: Historical median EV/EBITDA {acq_str} is "
                 f"{gap_pct:.0f}% above market ({mkt_str}). In Section 5, name the risk "
-                f"EXACTLY as: '{premium_x}x Premium Over Market — {acq_str} paid vs "
-                f"{mkt_str} market median; return compression if exit multiples contract.' "
-                f"Use {acq_str} and {premium_x}x — do not substitute any other numbers."
+                f"EXACTLY as: 'Above-Market Payer — {acq_str} historical median vs "
+                f"{mkt_str} market median (+{turns_diff} turns, +{gap_pct:.0f}% above market); "
+                f"exit multiple compression amplifies IRR risk.' "
+                f"Use {acq_str}, {mkt_str}, and +{turns_diff} turns — do not substitute any other numbers."
             )
         elif gap_pct < -10:
+            # stretch_pct: "must bid X% above historical comfort" means the base is the
+            # acquirer's OWN median (their comfort level), NOT the market median.
+            # Bug fix: old code used abs(gap_pct) which had market as denominator, giving
+            # 18% instead of the correct 22% for a 9.6x acquirer vs 11.7x market.
+            stretch_pct = round((market_median_ebitda - acquirer_median_ebitda) / acquirer_median_ebitda * 100)
             anomaly_parts.append(
                 f"⚠ BELOW-MARKET BUYER: Historical median EV/EBITDA {acq_str} is "
                 f"{abs(gap_pct):.0f}% below market ({mkt_str}). In Section 5, name the risk "
-                f"EXACTLY as: 'Market Rate Stretch Required — must bid {abs(gap_pct):.0f}% "
+                f"EXACTLY as: 'Market Rate Stretch Required — must bid {stretch_pct}% "
                 f"above historical {acq_str} comfort to win at prevailing {mkt_str} market rates.' "
                 f"Do NOT call this 'Valuation Premium' — this acquirer pays BELOW market."
             )
@@ -312,7 +378,12 @@ async def _generate_one(
         composite_score=round(candidate.get("composite_score", 0), 1),
         total_deals=candidate.get("total_deals", 0),
         closed_deals=candidate.get("closed_deals", 0),
+        primary_sector_deal_count=primary_sector_deal_count,
         adjacent_sector_deals=candidate.get("adjacent_sector_deals", 0),
+        deals_near_target=deals_near_target,
+        target_size_band=target_size_band,
+        deal_size_range=deal_size_range,
+        sector_counts=candidate.get("sector_counts", {}),
         median_deal_size_mm=candidate.get("median_deal_size_mm", "N/A"),
         median_ev_ebitda=candidate.get("median_ev_ebitda", "N/A"),
         median_ev_revenue=candidate.get("median_ev_revenue", "N/A"),
@@ -412,6 +483,55 @@ async def _generate_one(
     result["sub_scores"] = sub_scores
     result["composite_score"] = candidate.get("composite_score", result.get("composite_score", 0))
     result["conviction_level"] = conviction_baseline
+
+    # Post-generation scan for forbidden EBITDA attribution phrases.
+    # Three prompt layers already forbid this but gpt-4o-mini still produces it
+    # occasionally. A targeted repair with the exact violation quoted is more
+    # reliable than another instruction — the model responds to "here is what you
+    # wrote and here is why it is wrong" better than a preemptive warning.
+    _ebitda_re = re.compile(r"the\s+target'?s\s+(?:strong\s+)?ebitda", re.IGNORECASE)
+    _scan_text = " ".join(filter(None, [
+        result.get("acquirer_overview", ""),
+        result.get("strategic_fit_thesis", ""),
+        result.get("conviction_rationale", ""),
+        result.get("valuation_context", {}).get("note", "") if isinstance(result.get("valuation_context"), dict) else "",
+    ] + [rf.get("description", "") for rf in result.get("risk_flags", []) if isinstance(rf, dict)]))
+
+    if _ebitda_re.search(_scan_text):
+        logger.warning("forbidden_ebitda_phrase_detected_triggering_repair", acquirer=acquirer_name)
+        emitter.emit(EventType.VALIDATION_FAILED, node="generate_rationales", data={
+            "acquirer": acquirer_name, "error": "forbidden_ebitda_attribution_detected"
+        })
+        _repair_msg = HumanMessage(content=(
+            "CONTENT VIOLATION — your response must be corrected before delivery.\n\n"
+            "One or more sections contain a phrase matching 'the target's EBITDA margins' "
+            "or 'the target's strong EBITDA margins'. This is strictly prohibited.\n\n"
+            "Why: The target profile only states 'strong EBITDA margins' — no percentage, "
+            "no comparative context, no basis to claim the target has any specific margin "
+            "quality. You are attributing a data point you do not have.\n\n"
+            "Required fix: Remove every sentence that attributes EBITDA margin quality "
+            "to the current target. If you want to characterise what kind of businesses "
+            "this acquirer prefers, use the acquired_co_ebitda_margin_pct field from a "
+            "specific precedent deal in the data — that is the historical target's margin, "
+            "not the current target's. Replace the removed sentence with one that is "
+            "grounded in acquirer-specific data (deal count, sub-sector, deal type, cadence, "
+            "or a named precedent deal with its actual metrics).\n\n"
+            "Produce a corrected full response — all other sections unchanged."
+        ))
+        try:
+            _repaired = await _call_structured_with_retry(llm_structured, messages + [_repair_msg])
+            emitter.emit(EventType.VALIDATION_REPAIRED, node="generate_rationales", data={
+                "acquirer": acquirer_name
+            })
+            result = _repaired.model_dump()
+            result["rank"] = rank
+            result["sub_scores"] = sub_scores
+            result["composite_score"] = candidate.get("composite_score", result.get("composite_score", 0))
+            result["conviction_level"] = conviction_baseline
+        except Exception as _ebitda_repair_err:
+            logger.error("ebitda_repair_failed", acquirer=acquirer_name, error=str(_ebitda_repair_err))
+            # Keep original result — better than a stub
+
     return result
 
 

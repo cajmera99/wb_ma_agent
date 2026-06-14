@@ -32,8 +32,16 @@ Explicitly forbidden phrases — these will be flagged as failures if they appea
 - "willingness to invest" or "willingness to pay" — replace with what the data shows they actually do
 - "indicates a strong willingness" — replace with the specific deal or ratio that proves it
 - "execution uncertainty" or "execution risk" as a standalone phrase
-- "the target's strong EBITDA margins align with..." or any variant
+- ANY sentence that attributes EBITDA margin quality to the current target — this covers \
+  ALL variants including: "The target's strong EBITDA margins [align with / complement / \
+  support / enhance / allow / would improve / are consistent with]...", \
+  "the target's EBITDA margins would...", "the target's margins complement...", \
+  "the target's profitability profile aligns with..." — forbidden in every section
 - Referencing a specific EBITDA margin % for the target company — the target profile only states "strong EBITDA margins" with no percentage. Do not invent one.
+- "withdrawn deals indicate integration challenges" or "terminated deals suggest integration \
+  risk" — integration is post-close; withdrawn/terminated deals are pre-close failures \
+  (regulatory rejection, price disagreement, due diligence failure). Call them \
+  "deal completion risk" or "execution risk," never "integration challenges."
 - Median EV/EBITDA is a valuation MULTIPLE (e.g. 16.2x means the acquirer paid 16.2x EBITDA), never an EBITDA margin percentage. Do not call it a "margin" or compare it to a "%" figure.
 - "sector affinity score" or "100% sector affinity score" — never cite internal model scores. Instead write "all N deals are in [sector]" or "N of M deals are healthcare-adjacent"
 - "fits well within [acquirer]'s typical deal size range"
@@ -42,10 +50,10 @@ Explicitly forbidden phrases — these will be flagged as failures if they appea
 - "geographic expansion" without naming the specific region the acquirer currently lacks
 - "leverage operational synergies" as an opening clause
 - "rationale tags" — never expose model internals in client-facing text
-- Stating a specific deal count per sector (e.g. "16 deals in healthcare services") \
-  unless that exact number appears in sub_sector_counts or total_deals data. Never \
-  infer sector-specific deal counts from affinity scores or adjacency fields — those \
-  are weighted composites, not raw counts.
+- Stating a specific deal count per sector unless that exact number appears in \
+  sector_counts or sub_sector_counts data provided. The field "Deals in [sector]" \
+  gives the exact count for the TARGET sector — use it. Never infer counts from \
+  affinity scores or adjacency weighted composites — those are not raw counts.
 
 Distinguishing Strategic from Financial Sponsor theses:
 - Strategic buyers: thesis must name the specific capability gap, market adjacency, \
@@ -148,8 +156,12 @@ ACQUIRER M&A PROFILE (derived from dataset)
 --------------------------------------------
 Total Deals in Dataset:     {total_deals}
 Closed Deals:               {closed_deals}
-Healthcare-Adjacent Deals:  {adjacent_sector_deals}
+Deals in {sector}:          {primary_sector_deal_count}  ← exact count in target sector
+Deals in adjacent sectors:  {adjacent_sector_deals}
+Deals in {target_size_band}: {deals_near_target}  ← comparable size band to target
+Deal Size Range (all deals): {deal_size_range}  ← min to max across all deals
 Median Deal Size:           ${median_deal_size_mm}M
+Sector Breakdown (all):     {sector_counts}
 Median EV/EBITDA:           {median_ev_ebitda}x
 Median EV/Revenue:          {median_ev_revenue}x
 Top Rationale Tags:         {top_rationale_tags}
@@ -212,10 +224,21 @@ Critical rules:
 ---
 
 SECTION 1 — ACQUIRER OVERVIEW
-Who they are based on their dataset footprint: total deal count, \
-primary sectors, typical deal size range, acquirer type, and most \
-recent activity. Do not describe them generically — describe them \
-as the data reveals them.
+The FIRST sentence must be a data-dense anchor using the pre-computed fields above. \
+Required elements in sentence 1: total deals, exact count in {sector} \
+({primary_sector_deal_count}), deals in adjacent sectors ({adjacent_sector_deals}), \
+and the comparable-size deal count ({deals_near_target} deals in {target_size_band}). \
+Example pattern (adapt to natural prose — do not copy verbatim): \
+"{acquirer_name} has completed {total_deals} deals, {primary_sector_deal_count} in \
+{sector} and {adjacent_sector_deals} in adjacent healthcare sectors, with {deals_near_target} \
+falling in the {target_size_band} comparable-size band (median ${median_deal_size_mm}M \
+across a {deal_size_range} range)." \
+\
+Sentence 2: acquirer type, most recent deal year ({most_recent_year}), and dominant \
+deal type from deal_type_counts. \
+Sentence 3 (if applicable): platform cadence or rollup activity if the data supports it. \
+\
+Do not describe them generically — every sentence must cite a number or named data point.
 
 SECTION 2 — STRATEGIC FIT THESIS
 Before writing: ask what does THIS acquirer see in this target that a different \
@@ -223,7 +246,12 @@ buyer cannot execute as well? That answer is your opening sentence — not a \
 target attribute and not geographic expansion.
 
 FORBIDDEN (do not use any of these):
-- "The target's strong EBITDA margins [align/complement/are consistent with]..."
+- "The target's strong EBITDA margins [align/complement/are consistent with/would enhance/would allow]..." \
+  — all variants. The target has no disclosed margin percentage; you cannot claim quality.
+- Describing a completed past acquisition as "filling a gap" — that company is already in the \
+  portfolio and is not currently filling anything. If citing a past deal (e.g., "their 2020 \
+  acquisition of X"), frame it as demonstrating historical preference or capacity, not as \
+  something that fills a present gap. The CURRENT TARGET is the gap-filler; their 2020 deal is not.
 - "[Deal size] fits within [acquirer]'s typical deal size range" or any variant
 - "fills a gap in healthcare services" or "gap in [sector]" as a standalone opener with \
   no acquirer-specific follow-through — the reason the gap matters is different for every \
@@ -270,7 +298,9 @@ then build 3-4 sentences of evidence around it:
    data are not sufficient — the exit buyer must be grounded in the dataset.
 
 Every sentence must contain at least one number, named deal, or cited data point. \
-No sentence may be the last sentence if it contains no data.
+No sentence may be the last sentence if it contains no data. \
+When arguing size fit, cite {deals_near_target} deals in the {target_size_band} band \
+and the acquirer's median of ${median_deal_size_mm}M — not the overall range alone.
 
 SECTION 3 — PRECEDENT ACTIVITY
 List all deals from the precedent data provided (up to 5 shown, \
@@ -295,13 +325,17 @@ SECTION 5 — RISK FLAGS
 Identify exactly 2 risks. The two risks must come from different categories — \
 do not use the same category for both flags:
 (a) Valuation direction — CHECK THE VALUATION POSTURE SIGNAL ABOVE FIRST, then:
-    • If ABOVE-MARKET PAYER: name the premium gap and describe return compression \
-      at exit if market multiples contract (e.g., "4.5x Premium Over Market — \
-      16.5x paid vs 11.7x market exit multiple compresses IRR by X points")
-    • If BELOW-MARKET BUYER: name the STRETCH required, not a premium \
-      (e.g., "Market Rate Stretch Required — must bid 17% above historical \
-      9.6x comfort to win at prevailing 11.7x market rates"). Do NOT call \
-      this "Valuation Premium" — they do not pay premium, they pay discount.
+    • If ABOVE-MARKET PAYER: use the EXACT risk name provided in the signal above. \
+      It will follow this format: "Above-Market Payer — [acq]x historical median vs \
+      [mkt]x market median (+[N] turns, +[pct]% above market); exit multiple compression \
+      amplifies IRR risk." Use the exact numbers from the signal — do not substitute. \
+      NOTE: "+N turns" means N additive EV/EBITDA multiple points above market \
+      (NOT "Nx Premium" which would mean N times the market price — that is wrong).
+    • If BELOW-MARKET BUYER: use the EXACT risk name provided in the signal above. \
+      It will follow this format: "Market Rate Stretch Required — must bid [stretch_pct]% \
+      above historical [acq]x comfort to win at prevailing [mkt]x market rates." \
+      The stretch percentage is relative to the acquirer's OWN historical median \
+      (their comfort baseline), NOT the market median. Do NOT call this "Valuation Premium."
     • If AT-MARKET (within 15%): skip this category and use (g) or (h) instead
 (b) Deal size mismatch — CHECK THE DEAL SIZE SIGNAL ABOVE FIRST. \
     Only use this category if the signal is marked "GENUINE STRETCH." \
@@ -313,8 +347,13 @@ do not use the same category for both flags:
     Direction is always ABOVE (never Below) for a stretch scenario.
 (c) Deal type mismatch — bolt-on buyer asked to anchor a platform, or vice versa; \
     cite deal_type_counts to support
-(d) Integration track record — cite specific withdrawn or pending deals from the \
-    precedent data by name and year
+(d) Deal completion track record — cite specific withdrawn or pending deals from the \
+    precedent data by name and year. IMPORTANT: withdrawn and terminated deals are \
+    PRE-CLOSE failures (regulatory rejection, price disagreement, due diligence collapse) \
+    — they never reached the integration stage. Call this "deal completion risk" or \
+    "execution risk," NEVER "integration challenges" or "integration track record." \
+    Format: "[N] Withdrawn Deals — [Name (Year), Name (Year)] — withdrawn pre-close, \
+    indicating process execution or regulatory risk in this buyer's process."
 (e) Deal completion rate — if outcome quality score < 70, name the exact ratio and \
     identify the unclosed deals visible in the precedent data
 (f) Fund lifecycle or competitive tension — for PE sponsors: fund vintage pressure, \

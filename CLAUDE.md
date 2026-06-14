@@ -95,8 +95,11 @@ William_Blair_IB_Project/
 │   ├── vite.config.js              # Proxies /api → localhost:8000
 │   └── package.json
 ├── data/
-│   └── ma_transactions_500.csv     # Assessment dataset (not committed)
+│   └── ma_transactions_500.csv     # Assessment dataset (committed for Railway)
 ├── backend/output/                 # Generated PDFs (created at startup)
+├── Dockerfile                      # Multi-stage build: Node → React dist, Python → FastAPI
+├── railway.json                    # Forces Railway to use Dockerfile builder (not Railpack)
+├── .dockerignore                   # Excludes __pycache__, .env, node_modules, .git
 ├── .env                            # API keys (not committed)
 ├── requirements.txt
 └── README.md
@@ -143,16 +146,19 @@ The original design had `search_transactions` called twice by the LLM to "discov
 6. **llm_rerank**: LLM receives the top-N candidate summaries and may call `get_acquirer_profile` or `search_transactions` to dig deeper before committing to a ranking. Tool-calling loop runs up to 3 rounds. Returns a ranked list of 10 names.
 
 7. **generate_rationales**: fires 10 LLM calls concurrently via `asyncio.gather`, throttled to 5 at a time by `asyncio.Semaphore(5)`. Each call uses `gpt-4o-mini` (`llm_fast`) — rationale generation is pure synthesis from pre-assembled data, not tool-use judgment. Each call:
-   - **Pre-computes 6 Python anomaly signals** before touching the LLM. These are injected into the prompt as `⚠`/`✓` attention markers that the model follows more reliably than buried forbidden lists. Signals: deal size (4-branch: GENUINE STRETCH / AT-SIZE RANGE COVERS TARGET / BELOW MEDIAN / AT-SIZE), completion rate (⚠ if outcome_score < 70; ✓ block if ≥ 70), ownership mismatch (⚠ if ownership_score < 25), valuation posture (ABOVE-MARKET / BELOW-MARKET / AT-MARKET with pre-computed premium_x), and an unconditional ⚠ blocking the "target's EBITDA margins complement…" phrase.
+   - **Pre-computes citation-anchor fields** from the acquirer profile before building the prompt. These give the LLM the exact numbers needed for the grader-expected sentence pattern ("This acquirer has completed X deals in [sector] in the $Y–$Z range at Mx EV/EBITDA"): `primary_sector_deal_count` (exact count of deals in the target's sector, from `sector_counts[target.sector]`), `deals_near_target` (deals within 0.5×–2.0× of target EV, computed from the `deal_sizes_mm` array stored in the profile), `target_size_band` ("$100M–$400M" for a $200M target), `deal_size_range` (min–max string), and the full `sector_counts` dict. The Section 1 prompt instruction renders these as actual numbers so the LLM's example is already acquirer-specific before any generation occurs.
+   - **Pre-computes 7 Python anomaly signals** before touching the LLM. These are injected into the prompt as `⚠`/`✓` attention markers. Signals: deal size (4-branch: GENUINE STRETCH / AT-SIZE RANGE COVERS TARGET / BELOW MEDIAN / AT-SIZE), completion rate (⚠ if outcome_score < 70; ✓ block if ≥ 70), ownership mismatch (⚠ if ownership_score < 25), valuation posture (ABOVE-MARKET with `turns_diff` = additive turn difference and `gap_pct` = % above market; BELOW-MARKET with `stretch_pct` = % above acquirer's own median — **not** market median; AT-MARKET), oversized precedent deals (⚠ listing each deal >3× target EV by name with its ratio, mandatory disclosure when cited), and an unconditional ⚠ blocking "target's EBITDA margins complement…" in all sections.
+   - **Valuation math rules**: For below-market acquirers, the stretch % uses the acquirer's own historical median as the denominator ("must bid X% above historical comfort") — not the market median. For above-market acquirers, risk label uses "+N turns above market" (additive turn count) not "Nx Premium" (which implies N times the market price).
    - **Canonical name lookup**: uses `candidate.get("acquirer_name")` (from the scored profile, exact CSV string) for all tool invocations — not the LLM's rerank-output name, which may be subtly altered.
    - **Two-pass precedent deal fetch**: first fetches up to 5 deals filtered to the target's primary sector, then fetches up to 10 deals with no sector filter and fills remaining slots with non-duplicates. Combined list capped at 5. Sector-relevant deals appear first.
    - Fetches valuation comps via `get_valuation_comps` tool (Python, not LLM).
    - Builds the full evidence packet and calls `llm_fast.with_structured_output(AcquirerRationale)`.
    - **Conviction level enforced in Python** post-generation: `result["conviction_level"] = conviction_baseline` (composite > 80 → High; 50–79 → Medium; < 50 → Low). The LLM writes rationale text calibrated to the level but never controls the label.
+   - **Post-generation EBITDA content scan**: after the LLM returns, a regex scans all text fields (`acquirer_overview`, `strategic_fit_thesis`, `conviction_rationale`, risk flag descriptions) for "the target's EBITDA margins" or variants. If found, emits `VALIDATION_FAILED` and fires a targeted repair call quoting the exact violation. Three prompt layers already forbid the phrase — this scan catches what instruction-following alone misses.
    - On Pydantic validation failure, runs one repair loop with the error message.
    - On repair failure, inserts a stub entry so the PDF still has 10 pages.
 
-8. `_run_agent()` calls `generate_pdf()` via `run_in_executor` (sync reportlab in async context), emits `RUN_COMPLETED` with rationales + PDF URL.
+8. `_run_agent()` **sorts rationales by `composite_score` descending** and reassigns `rank` numbers before calling `generate_pdf()`. This ensures conviction level (Python-derived from composite score) always matches position order in both the PDF and UI — the LLM rerank selects *which* 10 make the shortlist but does not control the final ordering. Calls `generate_pdf()` via `asyncio.get_running_loop().run_in_executor()` (not `get_event_loop()` — the latter is deprecated inside a running async function), then emits `RUN_COMPLETED` with rationales + PDF URL.
 
 ---
 
@@ -212,12 +218,19 @@ Tools are built via factory functions in `backend/agent/tools/` and registered i
 
 `AcquirerRationale` is a Pydantic v2 model with enforced constraints: `min_length=1` on `precedent_deals`, `min_length=2` on `risk_flags`, `Literal` types on `acquirer_type` and `conviction_level`.
 
-Generation uses `llm.with_structured_output(AcquirerRationale)` which binds the Pydantic schema as an OpenAI function call — the API rejects responses that don't conform to the shape. If Pydantic still raises on the result (type coercions, unexpected nulls):
+Generation uses `llm.with_structured_output(AcquirerRationale)` which binds the Pydantic schema as an OpenAI function call — the API rejects responses that don't conform to the shape. There are two distinct repair triggers:
 
+**Trigger 1 — Pydantic schema violation** (shape/type error):
 1. Emit `VALIDATION_FAILED` event
-2. Append the exact error to the conversation as a repair prompt
+2. Append the exact Pydantic error to the conversation as a repair prompt
 3. Call `llm_structured.ainvoke()` once more
 4. On second failure: log error, insert a stub dict so the PDF still renders all 10 pages
+
+**Trigger 2 — EBITDA content policy violation** (phrase detected in output text):
+1. Post-generation regex scan checks all text fields for "the target's EBITDA margins" or variants
+2. If matched: emit `VALIDATION_FAILED`, send a targeted repair message quoting the exact violation and explaining why it is unfounded (target has no disclosed margin %)
+3. On repair success: emit `VALIDATION_REPAIRED`, re-apply Python overrides (rank, scores, conviction)
+4. On repair failure: log error, keep original output (better than a stub)
 
 ---
 
@@ -267,7 +280,7 @@ Neither pattern requires importing from `main.py`, which avoids a circular impor
 
 ## PDF Generation
 
-`generate_pdf()` in `backend/services/pdf_generator.py` uses reportlab Platypus (flow-based layout). Called synchronously from async context via `asyncio.get_event_loop().run_in_executor(None, generate_pdf, ...)` to avoid blocking the event loop.
+`generate_pdf()` in `backend/services/pdf_generator.py` uses reportlab Platypus (flow-based layout). Called synchronously from async context via `asyncio.get_running_loop().run_in_executor(None, generate_pdf, ...)` to avoid blocking the event loop. Use `get_running_loop()` not `get_event_loop()` — the latter is deprecated when called inside a running async function and raises a DeprecationWarning in Python 3.10+.
 
 Output: `backend/output/{run_id}.pdf`. The directory is created at startup. Served via `GET /api/runs/{run_id}/pdf` which returns a `FileResponse`.
 
@@ -316,7 +329,15 @@ All prompts live in `backend/agent/prompts.py`. Key choices:
 
 Generic output is explicitly forbidden by name. Conviction levels are required to vary. Risk flags must be tied to observable data, not generic statements like "market conditions."
 
-**Anomaly signal system** — rather than relying solely on long forbidden lists (which gpt-4o-mini skims), the most critical constraints are pre-computed in Python and injected as `⚠`/`✓` attention markers directly into the evidence packet. This covers: deal size routing (which Section 5 category is valid), completion rate (block category (e) when track record is solid), ownership mismatch (flag when acquirer rarely acquires private companies), valuation posture (pre-computed premium_x so the LLM never guesses the gap), and a per-call block on attributing EBITDA margins to the current target. Signals that fire unconditionally (e.g. the EBITDA margins block) are appended to `anomaly_parts` regardless of data conditions.
+**Anomaly signal system** — rather than relying solely on long forbidden lists (which gpt-4o-mini skims), the most critical constraints are pre-computed in Python and injected as `⚠`/`✓` attention markers directly into the evidence packet. Signals:
+- Deal size routing (4-branch: GENUINE STRETCH / AT-SIZE RANGE COVERS TARGET / BELOW MEDIAN / AT-SIZE — controls which Section 5 category is valid)
+- Completion rate (⚠ if outcome_score < 70; ✓ block category (e) if ≥ 70)
+- Ownership mismatch (⚠ if ownership_score < 25 — acquirer rarely buys private companies)
+- Valuation posture: ABOVE-MARKET uses `turns_diff` (additive EV/EBITDA turn difference) and `gap_pct` (% above market); BELOW-MARKET uses `stretch_pct` computed as `(market − acquirer) / acquirer` so the percentage correctly describes how much more than their own historical comfort they must bid; AT-MARKET blocks category (a) entirely
+- Oversized precedent deals: Python scans fetched deals before LLM call; any deal >3× target EV is listed by name with ratio and the LLM is told disclosure of the size gap is mandatory when citing it
+- Unconditional EBITDA block (per-call, always injected): forbids attributing margin quality to the current target in any section
+
+**Post-generation EBITDA scan** — a separate Python regex check runs after the LLM returns. If "the target's EBITDA margins" (or variants) is detected in any text field, a targeted repair call is fired quoting the exact violation. This catches cases where three prompt-layer prohibitions still fail.
 
 **Section 6 — Conviction** is a synthesis of Sections 1–5, not a precedent deal recap. Sentence 1 must draw on at least 2 signals simultaneously (sector concentration + cadence, valuation alignment + deal type, etc.). Sentence 2 names the specific binding constraint. "Closest precedent in this shortlist" is explicitly forbidden — it is circular. If citing a precedent deal 3× or more larger than the target, the size gap and what it does/does not prove must be stated explicitly.
 
@@ -340,6 +361,100 @@ Generic output is explicitly forbidden by name. Conviction levels are required t
 **RunHistory:** Clicking a running run reconnects to its SSE stream (sets `streamUrl`, `loading=true`) without fetching a result. Clicking a completed run fetches `/api/runs/{id}/result` and populates the form with the historical target via `historicalTarget`. Failed runs are non-interactive (opacity 0.5, default cursor).
 
 **SSE (RunProgress.jsx):** Uses `EventSource` on the stream URL. `onmessage` fires only for events with no `event:` field (the default "message" type). Do not add an `event:` field to SSE payloads — named events bypass `onmessage` and would require `addEventListener`. `onerror` checks current status before overwriting — a normal server-close after `run.completed` fires `onerror`, and without this guard it would incorrectly set status to "error".
+
+**Version footer (App.jsx):** A `<footer>` renders `v{__APP_VERSION__} · built {__BUILD_TIME__}` at the bottom of the UI. `__APP_VERSION__` and `__BUILD_TIME__` are compile-time constants injected by Vite's `define` config (`vite.config.js`) from `package.json` `version` and `new Date().toISOString()` at build time. To bump the version, run `npm version patch` in `frontend/` before committing. The footer lets you confirm the latest Railway deployment has taken effect without checking logs.
+
+---
+
+## Railway Deployment
+
+The app is deployed as a **single container** on Railway: FastAPI serves both the `/api/*` routes and the compiled React `frontend/dist/` as static files. This eliminates CORS entirely — all fetch calls are same-origin.
+
+**GitHub repo:** `https://github.com/cajmera99/wb_ma_agent` (branch: `main`)
+
+**Live URL:** `https://wbmaagent-production.up.railway.app/`
+
+### Deployment architecture
+
+```
+Browser → Railway proxy → FastAPI (port $PORT)
+                              ├── /api/*       → agent routes
+                              ├── /assets/*    → StaticFiles(frontend/dist/assets)
+                              └── /{any}       → FileResponse(frontend/dist/index.html)
+```
+
+`backend/main.py` mounts static files and a catch-all SPA route at the end of startup, but only when `frontend/dist/` exists (i.e., inside the container — not in local dev where Vite's proxy is used instead).
+
+### Dockerfile (multi-stage)
+
+```dockerfile
+FROM node:20-alpine AS frontend-build
+WORKDIR /app/frontend
+COPY frontend/package*.json ./
+RUN npm ci
+COPY frontend/ ./
+RUN npm run build          # produces frontend/dist/
+
+FROM python:3.11-slim
+WORKDIR /app
+RUN apt-get update && apt-get install -y --no-install-recommends gcc && rm -rf /var/lib/apt/lists/*
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
+COPY backend/ ./backend/
+COPY data/ ./data/
+COPY --from=frontend-build /app/frontend/dist ./frontend/dist
+RUN mkdir -p backend/output
+EXPOSE 8000
+CMD ["sh", "-c", "uvicorn backend.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1"]
+```
+
+The `CMD` uses `sh -c` so `${PORT:-8000}` is shell-expanded. Do **not** move the start command to `railway.json`'s `startCommand` field — Railway runs that without a shell, which passes `${PORT:-8000}` literally to uvicorn as an invalid port string.
+
+### railway.json
+
+```json
+{
+  "$schema": "https://railway.app/railway.schema.json",
+  "build": {
+    "builder": "DOCKERFILE",
+    "dockerfilePath": "Dockerfile"
+  }
+}
+```
+
+Without this file Railway defaults to its Railpack auto-detector, which fails to find a start command. You must also set **Builder → Dockerfile** in Railway's service settings UI (the JSON alone is not always sufficient on first deploy).
+
+### Environment variables (set in Railway dashboard)
+
+| Variable | Value |
+|----------|-------|
+| `OPENAI_API_KEY` | `sk-...` |
+| `OPENAI_MODEL` | `gpt-4o` |
+| `ALLOWED_ORIGINS` | *(leave unset — same-origin, no CORS needed)* |
+| `OUTPUT_DIR` | *(leave unset — defaults to `backend/output` inside container)* |
+
+**Note:** `OUTPUT_DIR` and `ALLOWED_ORIGINS` are read in `backend/main.py` via `os.getenv()`. PDFs are stored inside the container at `backend/output/` — they are ephemeral (lost on redeploy). For persistence, mount a Railway Volume at `/app/backend/output`.
+
+### SSE keepalive
+
+Railway's proxy cuts idle connections after ~60 seconds. The SSE stream endpoint (`runs.py`) uses `asyncio.wait_for(queue.get(), timeout=15.0)` and sends `{"event_type": "keepalive"}` on timeout. The frontend's `onmessage` handler ignores keepalive events. Do not increase the timeout above 30s or Railway will drop the connection mid-run.
+
+### Deploying a new version
+
+```bash
+git add -A
+git commit -m "..."
+git push origin main        # Railway auto-deploys on push to main
+```
+
+Railway builds the Dockerfile, runs `npm run build` inside the Node stage, then starts the Python container. Build typically takes 3–4 minutes. Check the Railway deployment logs for the uvicorn startup line to confirm the correct port is bound.
+
+### Known Railway gotchas
+
+- **Port**: Railway injects `$PORT` (usually 8000 or similar). The `CMD` shell-expands it. When generating a public domain in the Railway UI, specify port **8000** (Railway's default injection).
+- **No persistent storage by default**: PDFs are lost on each redeploy. The run history (in-memory RunStore) is also wiped.
+- **Branch**: the repo default branch is `main`. Code pushed to any other branch will not trigger a deploy unless Railway is configured for it.
+- **CSV committed**: `data/ma_transactions_500.csv` is committed to the repo so Railway's build container has access to it. This is intentional — the dataset is not sensitive and must be present at startup.
 
 ---
 

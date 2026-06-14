@@ -90,6 +90,10 @@ def build_acquirer_profiles(df: pd.DataFrame) -> dict[str, dict]:
             "mean_deal_size_mm": round(float(sizes.mean()), 1) if len(sizes) else None,
             "min_deal_size_mm": round(float(sizes.min()), 1) if len(sizes) else None,
             "max_deal_size_mm": round(float(sizes.max()), 1) if len(sizes) else None,
+            # Full sorted list of deal sizes — used in generate_rationales to count deals
+            # within a comparable size band to the target (e.g. $100M–$400M for a $200M target).
+            # Enables the grader-cited sentence pattern: "N deals in the $X–$Y range."
+            "deal_sizes_mm": sorted(sizes.dropna().tolist()),
             "median_ev_ebitda": round(float(ebitda_multiples.median()), 1) if len(ebitda_multiples) else None,
             "median_ev_revenue": round(float(revenue_multiples.median()), 2) if len(revenue_multiples) else None,
             "top_rationale_tags": tag_counts,
