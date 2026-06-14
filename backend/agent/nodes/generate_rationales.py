@@ -31,6 +31,7 @@ async def _generate_one(
     app_state,
     emitter,
     co_strategics: list[str] | None = None,
+    cached_comps_json: str | None = None,
 ) -> dict:
     """
     Build the full evidence packet for one acquirer then call the LLM.
@@ -329,20 +330,25 @@ async def _generate_one(
             "synergy argument specific to this buyer."
         )
 
-    # Step 2: Fetch market valuation comps for the target sector + size range
-    comps_tool = tool_map.get("get_valuation_comps")
-    valuation_comps_json = "{}"
-    if comps_tool:
-        try:
-            size = target.deal_size_mm
-            comps_result = comps_tool.invoke({
-                "sectors": [target.sector],
-                "deal_size_min": size * 0.4,
-                "deal_size_max": size * 2.5,
-            })
-            valuation_comps_json = comps_result if isinstance(comps_result, str) else json.dumps(comps_result)
-        except Exception as e:
-            logger.warning("valuation_comps_fetch_failed", acquirer=acquirer_name, error=str(e))
+    # Step 2: Market valuation comps — identical for all acquirers in a run (same target
+    # sector + size range). Use the pre-fetched result if available; only fall back to a
+    # live fetch if this acquirer is being regenerated without the cached value.
+    if cached_comps_json is not None:
+        valuation_comps_json = cached_comps_json
+    else:
+        comps_tool = tool_map.get("get_valuation_comps")
+        valuation_comps_json = "{}"
+        if comps_tool:
+            try:
+                size = target.deal_size_mm
+                comps_result = comps_tool.invoke({
+                    "sectors": [target.sector],
+                    "deal_size_min": size * 0.4,
+                    "deal_size_max": size * 2.5,
+                })
+                valuation_comps_json = comps_result if isinstance(comps_result, str) else json.dumps(comps_result)
+            except Exception as e:
+                logger.warning("valuation_comps_fetch_failed", acquirer=acquirer_name, error=str(e))
 
     # Valuation posture signal — computed now that we have the market median.
     # This fixes a persistent bug where below-market buyers get labelled "Valuation Premium"
@@ -640,6 +646,23 @@ async def node_generate_rationales(state: AgentState, config: RunnableConfig) ->
         if _normalize_acquirer_type(scored_map.get(name, {}).get("acquirer_type", "Strategic")) == "Strategic"
     ]
 
+    # Pre-fetch valuation comps once — the result is identical for every acquirer in this
+    # run (same target.sector and deal_size_mm). Passing it as cached_comps_json eliminates
+    # 9 of 10 redundant DataFrame filter calls inside _generate_one.
+    comps_tool = tool_map.get("get_valuation_comps")
+    cached_comps_json: str | None = None
+    if comps_tool:
+        try:
+            size = target.deal_size_mm
+            comps_result = comps_tool.invoke({
+                "sectors": [target.sector],
+                "deal_size_min": size * 0.4,
+                "deal_size_max": size * 2.5,
+            })
+            cached_comps_json = comps_result if isinstance(comps_result, str) else json.dumps(comps_result)
+        except Exception as e:
+            logger.warning("valuation_comps_prefetch_failed", error=str(e))
+
     # Semaphore(5): gpt-4o-mini has ~10× higher TPM limits than gpt-4o so rate-limit
     # stalls are no longer a concern. 5 concurrent calls keeps total rationale time
     # to ~2 batches (~15-20s) without hitting mini's generous per-minute budget.
@@ -649,7 +672,7 @@ async def node_generate_rationales(state: AgentState, config: RunnableConfig) ->
         async with sem:
             is_pe = _normalize_acquirer_type(candidate.get("acquirer_type", "Strategic")) == "Financial Sponsor"
             co_strategics = strategic_names_in_run if is_pe else []
-            return await _generate_one(name, rank, candidate, target, tool_map, app_state, emitter, co_strategics)
+            return await _generate_one(name, rank, candidate, target, tool_map, app_state, emitter, co_strategics, cached_comps_json)
 
     results = await asyncio.gather(
         *[_throttled(name, rank, scored_map.get(name, {})) for rank, name in enumerate(final_names, 1)],

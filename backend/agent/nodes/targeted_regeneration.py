@@ -7,6 +7,7 @@ are preserved unchanged. Routes unconditionally to END.
 """
 
 import asyncio
+import json
 from langchain_core.runnables import RunnableConfig
 
 from backend.agent.state import AgentState
@@ -43,6 +44,21 @@ async def node_targeted_regeneration(state: AgentState, config: RunnableConfig) 
     tool_map = {t.name: t for t in app_state.tools}
     final_names = state["final_acquirer_names"]
 
+    # Pre-fetch comps once for the 1–3 regeneration calls (same logic as node_generate_rationales)
+    comps_tool = tool_map.get("get_valuation_comps")
+    cached_comps_json = None
+    if comps_tool:
+        try:
+            size = target.deal_size_mm
+            comps_result = comps_tool.invoke({
+                "sectors": [target.sector],
+                "deal_size_min": size * 0.4,
+                "deal_size_max": size * 2.5,
+            })
+            cached_comps_json = comps_result if isinstance(comps_result, str) else json.dumps(comps_result)
+        except Exception as e:
+            logger.warning("valuation_comps_prefetch_failed", error=str(e))
+
     strategic_names = [
         n for n in final_names
         if _normalize_acquirer_type(scored_map.get(n, {}).get("acquirer_type", "Strategic")) == "Strategic"
@@ -59,7 +75,7 @@ async def node_targeted_regeneration(state: AgentState, config: RunnableConfig) 
             issue = issues.get(name, "")
             logger.info("targeted_regen_starting", acquirer=name, issue=issue)
             result = await _generate_one(
-                name, rank, candidate, target, tool_map, app_state, emitter, co_strategics
+                name, rank, candidate, target, tool_map, app_state, emitter, co_strategics, cached_comps_json
             )
             return name, result
 
