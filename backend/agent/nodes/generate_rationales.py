@@ -611,16 +611,16 @@ async def _generate_one(
     # [strong] EBITDA margins complement/align with/support/enhance..." — not on any
     # mention of the target's margins, which is now encouraged with acquirer-specific framing.
     _ebitda_re = re.compile(
-        # Pattern 1: "the/this target's [strong] EBITDA margins [verb]"
-        # Adds will/can/should alongside existing would, and more verb stems.
+        # Catches generic boilerplate: "the/this target's [strong] EBITDA margins [verb]"
+        # where the verb is standalone-generic (no acquirer-specific data needed to complete
+        # the thought). "will enhance their valuation model AT X.Xx" is acquirer-specific
+        # and should NOT be caught — so "will/can" are excluded. "would/should/can" plus
+        # "enhance/complement/align/support" ARE included since those constructions appear
+        # independent of any specific data point.
         r"(?:the|this)\s+target'?s\s+(?:strong\s+)?ebitda\s+margins?\s+"
         r"(?:complement|align\s+with|support|enhance|are\s+consistent\s+with"
-        r"|(?:would|will|can|should)\s+(?:improve|support|enhance|align|complement"
-        r"|benefit|strengthen|underpin|make|help|drive|allow|enable))"
-        # Pattern 2: "the/this target's strong margins [verb]" (EBITDA keyword absent)
-        r"|(?:the|this)\s+target'?s\s+strong\s+margins?\s+"
-        r"(?:complement|align\s+with|support|enhance|are\s+consistent\s+with"
-        r"|(?:would|will|can|should)\s+\w+)",
+        r"|(?:would|can|should)\s+(?:improve|support|enhance|complement|align"
+        r"|benefit|strengthen)|are\s+attractive|are\s+aligned)",
         re.IGNORECASE,
     )
     _scan_text = " ".join(filter(None, [
@@ -667,61 +667,6 @@ async def _generate_one(
         except Exception as _ebitda_repair_err:
             logger.error("ebitda_repair_failed", acquirer=acquirer_name, error=str(_ebitda_repair_err))
             # Keep original result — better than a stub
-
-    # Post-generation scan for high-frequency filler phrases.
-    # "fills a [adjective] gap" and "positions them/this acquirer" appear on 8-9 of 10
-    # pages because the LLM treats them as connective tissue despite the pre-prompt signal.
-    # Running a repair here catches what the anomaly injection misses.
-    _acquirer_name_escaped = re.escape(acquirer_name)
-    _forbidden_phrase_re = re.compile(
-        r"fills?\s+a\s+(?:critical|specific|key|strategic|unique|significant|important"
-        r"|clear|real|natural|notable|distinct|meaningful|niche|defined)\s+(?:\w+\s+)?gap"
-        r"|positions?\s+(?:them|this\s+acquirer|this\s+(?:firm|buyer|fund|company|sponsor)"
-        r"|" + _acquirer_name_escaped + r")",
-        re.IGNORECASE,
-    )
-    _forbidden_scan_fields = " ".join(filter(None, [
-        result.get("acquirer_overview", ""),
-        result.get("strategic_fit_thesis", ""),
-        result.get("conviction_rationale", ""),
-    ] + [rf.get("description", "") for rf in result.get("risk_flags", []) if isinstance(rf, dict)]))
-
-    _forbidden_match = _forbidden_phrase_re.search(_forbidden_scan_fields)
-    if _forbidden_match:
-        _matched_phrase = _forbidden_match.group(0)
-        logger.warning("forbidden_filler_phrase_detected", acquirer=acquirer_name, phrase=_matched_phrase)
-        emitter.emit(EventType.VALIDATION_FAILED, node="generate_rationales", data={
-            "acquirer": acquirer_name, "error": "forbidden_filler_phrase_detected"
-        })
-        _phrase_repair_msg = HumanMessage(content=(
-            f"CONTENT VIOLATION — your response contains a forbidden filler phrase: "
-            f'"{_matched_phrase}"\n\n'
-            "Replace it with a data-specific alternative:\n"
-            "  • 'fills a [adjective] gap' → name the exact sub-sector from sub_sector_counts "
-            "this target adds, and the specific competitive reason THIS acquirer needs it\n"
-            "  • 'positions them/this acquirer/[name] [to/well/as]' → state the direct "
-            "implication from the data — cite a specific deal count, size calibration, or "
-            "sub-sector fact without the transitional filler phrase\n\n"
-            "Produce a corrected full response — all other sections unchanged. "
-            "Do NOT introduce any other forbidden phrases in the correction."
-        ))
-        try:
-            _phrase_repaired = await _call_structured_with_retry(
-                llm_structured, messages + [_phrase_repair_msg]
-            )
-            emitter.emit(EventType.VALIDATION_REPAIRED, node="generate_rationales", data={
-                "acquirer": acquirer_name
-            })
-            logger.info("forbidden_phrase_repair_succeeded", acquirer=acquirer_name)
-            _pr = _phrase_repaired.model_dump()
-            _pr["rank"] = rank
-            _pr["sub_scores"] = sub_scores
-            _pr["composite_score"] = candidate.get("composite_score", _pr.get("composite_score", 0))
-            _pr["conviction_level"] = conviction_baseline
-            result = _pr
-        except Exception as _phrase_repair_err:
-            logger.error("forbidden_phrase_repair_failed", acquirer=acquirer_name, error=str(_phrase_repair_err))
-            # Keep original — better than a stub
 
     return result
 
