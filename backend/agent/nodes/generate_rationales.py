@@ -450,15 +450,22 @@ async def _generate_one(
     # long forbidden lists and reverts to templates. A pre-computed ⚠ signal
     # immediately before the output task forces explicit attention before writing.
     anomaly_parts.append(
-        "⚠ ZERO-TOLERANCE PHRASES — POST-GENERATION SCAN ACTIVE (triggers rewrite):\n"
-        "  • 'fills a [critical/specific/key/strategic/unique] gap' → INSTEAD: name the "
-        "exact sub-sector from sub_sector_counts that this target adds and the specific "
-        "reason THIS acquirer needs it — not any generic gap claim\n"
-        "  • 'positions them [to/well/as/uniquely]' / 'positions this acquirer' / "
-        f"'positions {acquirer_name}' → INSTEAD: state what the data shows they can do "
-        "with a specific number (deal count, size, sub-sector concentration)\n"
-        "Both phrases are connective filler that signal missing analysis. Replace with "
-        "the specific numbers from sub_sector_counts, deal_type_counts, or precedent data."
+        "⚠ FORBIDDEN FILLER PHRASES — WRITE THE REPLACEMENT, NOT THE PHRASE:\n"
+        "These appear in every first draft and contain zero analysis:\n\n"
+        f"  BANNED: 'positions {acquirer_name} [uniquely/well/to] [leverage/capitalize/...]'\n"
+        "  BANNED: 'positions them [uniquely/well/to/as]' in any form\n"
+        "  BANNED: 'fills a [critical/specific/key/unique/strategic/operational] [X] gap'\n"
+        "  BANNED: 'fills a critical need for [X]'\n"
+        "  BANNED: 'adds a critical [X] capability'\n\n"
+        "REQUIRED replacement pattern for each:\n"
+        "  FOR 'positions them' → Write what the DATA shows they can actually do: cite a "
+        "specific deal count, sub-sector from sub_sector_counts, or size from the precedent "
+        "table. e.g. '4 of 24 deals in Healthcare Services concentrated in [sub-sector] make "
+        "this target a direct platform extension, unlike the other sponsors with 0–1 sector deals.'\n"
+        "  FOR 'fills a gap' → Name the absent sub-sector from sub_sector_counts, then "
+        "state WHY this specific acquirer needs it: e.g. 'Nordic Capital has 0 Home Health "
+        "deals in 4 Healthcare Services acquisitions — this target adds the one sub-sector "
+        "absent from their platform.'"
     )
 
     # Assemble the complete anomaly flags block now that all signals are computed.
@@ -649,8 +656,15 @@ async def _generate_one(
             "entry and exit multiple\n"
             "- For strategic buyers: explain whether the target's profile is above, at, or "
             "below what this acquirer typically acquires, and what that implies for pricing\n\n"
-            "Do NOT invent a margin %. 'Strong' is the only descriptor you have. Replace "
-            "the generic sentence with one of the acquirer-specific framings above.\n\n"
+            "Do NOT invent a margin %. 'Strong' is the only descriptor you have.\n\n"
+            "CRITICAL — the following replacement phrases are ALSO forbidden and will "
+            "trigger another rejection if you use them:\n"
+            "  - 'positions them [uniquely/well/to] [leverage/capitalize/...]'\n"
+            "  - 'fills a [critical/specific/key] [X] gap'\n"
+            "  - 'fills a critical need for'\n"
+            "  - 'adds a critical [X] capability'\n"
+            "Use actual numbers from the IRR math, margin comparison, or sub-sector count "
+            "instead of these connector phrases.\n\n"
             "Produce a corrected full response — all other sections unchanged."
         ))
         try:
