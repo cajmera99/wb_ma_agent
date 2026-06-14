@@ -487,9 +487,12 @@ def generate_pdf(run_id: str, target: TargetProfile, rationales: list[dict]) -> 
     _build_cover_page(target, styles, flowables)
     flowables.append(PageBreak())
 
-    # One page per acquirer (sorted by rank)
-    sorted_rationales = sorted(rationales, key=lambda r: r.get("rank", 99))
-    for rationale in sorted_rationales:
+    # Sort by composite score descending so conviction level always matches position:
+    # High conviction acquirers appear first, Low conviction last. The LLM rerank
+    # determines which 10 make the shortlist; composite score determines their order.
+    sorted_rationales = sorted(rationales, key=lambda r: -r.get("composite_score", 0))
+    for i, rationale in enumerate(sorted_rationales):
+        rationale = {**rationale, "rank": i + 1}
         _build_acquirer_page(rationale, styles, flowables)
 
     doc.build(flowables, onFirstPage=_draw_page_footer, onLaterPages=_draw_page_footer)
