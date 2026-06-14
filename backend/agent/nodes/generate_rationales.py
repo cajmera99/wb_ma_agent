@@ -180,18 +180,9 @@ async def _generate_one(
             f"specific risk noting their limited experience with private-company transactions."
         )
 
-    # EBITDA margins forbidden phrase — injected as a ⚠ signal because long forbidden
-    # lists get skimmed; attention-marker signals are more reliably followed by mini.
-    anomaly_parts.append(
-        "⚠ FORBIDDEN IN ALL SECTIONS: Never write any sentence that attributes EBITDA "
-        "margin quality TO THE CURRENT TARGET (e.g. 'The target's strong EBITDA margins "
-        "complement/align with/support [acquirer]'s strategy' or 'the target's margins "
-        "would improve portfolio performance'). The target profile only states "
-        "'strong EBITDA margins' with no percentage and no comparative context. "
-        "If using acquired_co_ebitda_margin_pct from a precedent deal, you may describe "
-        "THAT acquired company's margin profile to characterise what this acquirer prefers "
-        "— but never transfer that percentage to the current target."
-    )
+    # EBITDA margin differentiation signal is appended to anomaly_parts after the
+    # precedent deals fetch (Step 1) — it references historical acquisition margins
+    # from acquired_co_ebitda_margin_pct, which requires the fetched deal data.
 
     # Valuation posture is computed AFTER the comps fetch (market median needed).
     # Placeholder — appended to anomaly_parts below after Step 2.
@@ -284,6 +275,59 @@ async def _generate_one(
             )
     except Exception:
         pass
+
+    # EBITDA margin differentiation signal — computed here so we can reference the
+    # historical acquisition margin profile from the fetched precedent deals.
+    # "Strong EBITDA margins" is real information; the goal is to force acquirer-specific
+    # framing rather than the generic boilerplate that applies to all 10 identically.
+    _margin_data = []
+    try:
+        _deals_for_margin = json.loads(precedent_deals_json)
+        for _d in _deals_for_margin.get("deals", []):
+            _m = _d.get("acquired_co_ebitda_margin_pct")
+            if _m is not None:
+                _margin_data.append(float(_m))
+    except Exception:
+        pass
+
+    if _margin_data:
+        _hist_margin_str = (
+            f"This acquirer's precedent acquisitions averaged "
+            f"{round(sum(_margin_data) / len(_margin_data), 1):.1f}% EBITDA margins "
+            f"(acquired_co_ebitda_margin_pct across {len(_margin_data)} deals above). "
+            f"State whether the target's 'strong margins' suggest a profile above, at, or "
+            f"below that historical threshold — and what the conclusion implies for deal "
+            f"rationale or pricing."
+        )
+    else:
+        _hist_margin_str = (
+            "Historical margin data from precedent deals is not available for this acquirer. "
+            "Reference the target's strong margins in relation to their valuation model "
+            "(entry/exit multiple, IRR math, or sector median) instead."
+        )
+
+    if acquirer_type == "Financial Sponsor":
+        anomaly_parts.append(
+            "TARGET MARGIN SIGNAL — DIFFERENTIATE FOR PE SPONSOR: "
+            "The target carries 'strong EBITDA margins' (no % disclosed). For a PE sponsor "
+            "high entry margins mean a larger absolute EBITDA base — directly affecting what "
+            "entry multiple the fund can justify to hit target IRR at the prevailing exit "
+            f"multiple. {_hist_margin_str} "
+            "FORBIDDEN: 'the target's strong EBITDA margins complement / align with / support "
+            "this sponsor's strategy' — this phrase applies to every PE firm on the shortlist "
+            "and is not analysis. Replace it with the IRR or portfolio-specific argument above."
+        )
+    else:
+        anomaly_parts.append(
+            "TARGET MARGIN SIGNAL — DIFFERENTIATE FOR STRATEGIC BUYER: "
+            "The target carries 'strong EBITDA margins' (no % disclosed). Use this as a "
+            "signal that means something specific to THIS acquirer — not a generic statement. "
+            f"{_hist_margin_str} "
+            "FORBIDDEN: 'the target's strong EBITDA margins complement / align with / support "
+            "this acquirer's strategy' — this phrase applies to every strategic on the shortlist "
+            "and is not analysis. Replace it with the margin comparison or a named valuation / "
+            "synergy argument specific to this buyer."
+        )
 
     # Step 2: Fetch market valuation comps for the target sector + size range
     comps_tool = tool_map.get("get_valuation_comps")
@@ -497,7 +541,15 @@ async def _generate_one(
     # occasionally. A targeted repair with the exact violation quoted is more
     # reliable than another instruction — the model responds to "here is what you
     # wrote and here is why it is wrong" better than a preemptive warning.
-    _ebitda_re = re.compile(r"(?:the|this)\s+target'?s\s+(?:strong\s+)?ebitda", re.IGNORECASE)
+    # Only trigger repair on the generic boilerplate construction — "the/this target's
+    # [strong] EBITDA margins complement/align with/support/enhance..." — not on any
+    # mention of the target's margins, which is now encouraged with acquirer-specific framing.
+    _ebitda_re = re.compile(
+        r"(?:the|this)\s+target'?s\s+(?:strong\s+)?ebitda\s+margins?\s+"
+        r"(?:complement|align\s+with|support|enhance|are\s+consistent\s+with"
+        r"|would\s+improve|would\s+support|are\s+attractive|are\s+aligned)",
+        re.IGNORECASE,
+    )
     _scan_text = " ".join(filter(None, [
         result.get("acquirer_overview", ""),
         result.get("strategic_fit_thesis", ""),
@@ -512,18 +564,20 @@ async def _generate_one(
         })
         _repair_msg = HumanMessage(content=(
             "CONTENT VIOLATION — your response must be corrected before delivery.\n\n"
-            "One or more sections contain a phrase matching 'the target's EBITDA margins' "
-            "or 'the target's strong EBITDA margins'. This is strictly prohibited.\n\n"
-            "Why: The target profile only states 'strong EBITDA margins' — no percentage, "
-            "no comparative context, no basis to claim the target has any specific margin "
-            "quality. You are attributing a data point you do not have.\n\n"
-            "Required fix: Remove every sentence that attributes EBITDA margin quality "
-            "to the current target. If you want to characterise what kind of businesses "
-            "this acquirer prefers, use the acquired_co_ebitda_margin_pct field from a "
-            "specific precedent deal in the data — that is the historical target's margin, "
-            "not the current target's. Replace the removed sentence with one that is "
-            "grounded in acquirer-specific data (deal count, sub-sector, deal type, cadence, "
-            "or a named precedent deal with its actual metrics).\n\n"
+            "One or more sections contain generic EBITDA margin boilerplate matching "
+            "'the/this target's [strong] EBITDA margins complement / align with / support / "
+            "enhance [acquirer]'s strategy' or a close variant. This is prohibited because "
+            "it applies identically to every acquirer on the shortlist — it is not analysis.\n\n"
+            "IMPORTANT: You may and should reference the target's strong margins — but make "
+            "the claim specific to THIS acquirer. Acceptable framings:\n"
+            "- Compare to this acquirer's historical acquisition margins "
+            "(acquired_co_ebitda_margin_pct from precedent deals provided above)\n"
+            "- For PE sponsors: explain what high entry margins mean for IRR at the expected "
+            "entry and exit multiple\n"
+            "- For strategic buyers: explain whether the target's profile is above, at, or "
+            "below what this acquirer typically acquires, and what that implies for pricing\n\n"
+            "Do NOT invent a margin %. 'Strong' is the only descriptor you have. Replace "
+            "the generic sentence with one of the acquirer-specific framings above.\n\n"
             "Produce a corrected full response — all other sections unchanged."
         ))
         try:

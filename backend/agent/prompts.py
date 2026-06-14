@@ -32,12 +32,15 @@ Explicitly forbidden phrases — these will be flagged as failures if they appea
 - "willingness to invest" or "willingness to pay" — replace with what the data shows they actually do
 - "indicates a strong willingness" — replace with the specific deal or ratio that proves it
 - "execution uncertainty" or "execution risk" as a standalone phrase
-- ANY sentence that attributes EBITDA margin quality to the current target — this covers \
-  ALL variants including: "The target's strong EBITDA margins [align with / complement / \
-  support / enhance / allow / would improve / are consistent with]...", \
-  "the target's EBITDA margins would...", "the target's margins complement...", \
-  "the target's profitability profile aligns with..." — forbidden in every section
-- Referencing a specific EBITDA margin % for the target company — the target profile only states "strong EBITDA margins" with no percentage. Do not invent one.
+- Inventing a specific EBITDA margin % for the target — the profile states "strong EBITDA \
+  margins" with no number. Never write "margins of X%" or "EBITDA margin of X%" for the target.
+- Generic EBITDA margin boilerplate that applies identically to all acquirers: \
+  "the target's strong EBITDA margins complement / align with / support / enhance \
+  [acquirer]'s strategy" — forbidden. The target's strong margins ARE a real signal; \
+  use them in a way specific to THIS acquirer: compare to their historical acquisition \
+  margin profile (acquired_co_ebitda_margin_pct from precedent deals), explain the \
+  implication for their valuation model or IRR math, or tie it to a named data point. \
+  Generic boilerplate is not analysis.
 - "withdrawn deals indicate integration challenges" or "terminated deals suggest integration \
   risk" — integration is post-close; withdrawn/terminated deals are pre-close failures \
   (regulatory rejection, price disagreement, due diligence failure). Call them \
@@ -223,14 +226,21 @@ MARKET VALUATION COMPS (closed deals, comparable size and sector)
 -----------------------------------------------------------------
 {valuation_comps_json}
 
-IMPORTANT — EBITDA margin data in the comps above belongs to MARKET COMPARABLES, \
-not to the target. The target profile only states "strong EBITDA margins" — do NOT \
-invent a specific margin percentage for the target. Never write "the target's EBITDA \
-margins of X%." Median EV/EBITDA in the acquirer profile is a deal MULTIPLE, not a margin. \
-EV/EBITDA multiples in the PRECEDENT DEALS table are also pricing multiples — a deal at \
-16.6x EV/EBITDA means the buyer paid 16.6 times the company's EBITDA as a price. Never \
-describe a precedent deal's EV/EBITDA multiple as an "EBITDA margin percentage" — they \
-are entirely different metrics. A 16.6x multiple does not mean 16.6% margins.
+IMPORTANT — Using the margin signal correctly:
+The target has "strong EBITDA margins" — this is real information. Use it. But any mention \
+must be acquirer-specific. The DATA SIGNALS block above contains an acquirer-specific \
+margin signal — follow it. "The target's strong EBITDA margins complement / align with / \
+support [acquirer]'s strategy" is forbidden because it applies to all 10 acquirers equally \
+and contains zero analysis. Instead: compare to this acquirer's historical acquisition \
+margin profile (acquired_co_ebitda_margin_pct in precedent deals), explain what high entry \
+margins mean for their valuation model or IRR math, or tie the observation to a named \
+data point that makes it specific to this buyer. Do not invent a margin % — "strong" is \
+the only descriptor available. \
+\
+EV/EBITDA multiples are pricing multiples, not margin percentages. Median EV/EBITDA in the \
+acquirer profile means they paid that multiple times the acquired company's EBITDA as a \
+price — never a margin. Never describe a precedent deal's multiple as an "EBITDA margin \
+percentage." A 16.6x multiple does not mean 16.6% margins.
 
 {co_acquirer_context}{anomaly_flags}
 YOUR TASK
@@ -277,8 +287,11 @@ buyer cannot execute as well? That answer is your opening sentence — not a \
 target attribute and not geographic expansion.
 
 FORBIDDEN (do not use any of these):
-- "The target's strong EBITDA margins [align/complement/are consistent with/would enhance/would allow]..." \
-  — all variants. The target has no disclosed margin percentage; you cannot claim quality.
+- "The target's strong EBITDA margins [align/complement/are consistent with/would enhance/would allow] \
+  [acquirer]'s strategy" — generic boilerplate forbidden. You MAY mention the target's strong \
+  margins if grounded in THIS acquirer's data: their historical acquisition margin average \
+  (acquired_co_ebitda_margin_pct from precedent deals), their valuation model, or a named \
+  deal comparison. Do not invent a margin % — "strong" is the only descriptor available.
 - Describing a completed past acquisition as "filling a gap" — that company is already in the \
   portfolio and is not currently filling anything. If citing a past deal (e.g., "their 2020 \
   acquisition of X"), frame it as demonstrating historical preference or capacity, not as \
