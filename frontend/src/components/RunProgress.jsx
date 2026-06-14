@@ -10,6 +10,8 @@ const NODE_LABELS = {
   expand_candidate_pool: 'Expanding candidate pool',
   llm_rerank: 'LLM re-ranking',
   generate_rationales: 'Generating rationales',
+  quality_gate: 'Quality gate',
+  targeted_regeneration: 'Targeted regeneration',
 }
 
 const EVENT_ICONS = {
@@ -73,6 +75,12 @@ function formatEvent(evt) {
   const d = evt.data || {}
 
   if (type === 'node.completed' && d.total_acquirers_scored) return `${node}${d.total_acquirers_scored} acquirers scored — top: ${d.top_acquirer} (${d.top_score?.toFixed(1)})`
+  if (type === 'routing.decision' && evt.node === 'quality_gate') {
+    if (d.routing_to === 'regenerate_weak') {
+      return `Quality gate → regenerating: ${(d.weak_acquirers || []).join(', ')}`
+    }
+    return `Quality gate → proceed to PDF (${d.reasoning || 'quality acceptable'})`
+  }
   if (type === 'routing.decision') return `Coverage: ${d.candidates_above_threshold} above threshold → ${d.routing_to}`
   if (type === 'tool.called') return `${node}→ ${d.tool}(${JSON.stringify(d.args || {}).slice(0, 80)})`
   if (type === 'rationale.generated') return `${node}#${d.rank} ${d.acquirer} — ${d.conviction} conviction`

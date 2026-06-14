@@ -30,3 +30,9 @@ class AgentState(TypedDict):
 
     # Non-fatal errors — logged and surfaced to frontend without crashing
     errors: list[str]
+
+    # Set by quality_gate — routing decision + list of weak acquirer names
+    quality_gate_result: dict
+
+    # Set True by targeted_regeneration after it runs — prevents re-entry
+    regeneration_attempted: bool

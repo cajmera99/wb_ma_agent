@@ -108,6 +108,8 @@ async def _run_agent(
         "rerank_reasoning": "",
         "rationales": [],
         "errors": [],
+        "quality_gate_result": {},
+        "regeneration_attempted": False,
     }
 
     # Pass emitter and app_state via config["configurable"] so every node

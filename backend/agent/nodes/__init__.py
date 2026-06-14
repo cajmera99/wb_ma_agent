@@ -3,6 +3,8 @@ from backend.agent.nodes.evaluate_coverage import node_evaluate_coverage, route_
 from backend.agent.nodes.expand_candidate_pool import node_expand_candidate_pool
 from backend.agent.nodes.llm_rerank import node_llm_rerank
 from backend.agent.nodes.generate_rationales import node_generate_rationales
+from backend.agent.nodes.quality_gate import node_quality_gate, route_after_quality_gate
+from backend.agent.nodes.targeted_regeneration import node_targeted_regeneration
 
 __all__ = [
     "node_score_and_rank",
@@ -11,4 +13,7 @@ __all__ = [
     "node_expand_candidate_pool",
     "node_llm_rerank",
     "node_generate_rationales",
+    "node_quality_gate",
+    "route_after_quality_gate",
+    "node_targeted_regeneration",
 ]

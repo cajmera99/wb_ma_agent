@@ -531,3 +531,63 @@ FORBIDDEN in Section 6:
 - Two sentences with the same grammatical skeleton (both opening with "[Acquirer]'s X" or \
   both ending with "however, Y limits confidence") — vary the construction between the two
 """
+
+
+# ---------------------------------------------------------------------------
+# 4. QUALITY GATE PROMPT
+# LLM-driven routing decision after generate_rationales.
+# Receives compact summaries of all 10 rationales and identifies 0–3 weak
+# ones for targeted regeneration. The routing decision itself is LLM-driven —
+# template detection across 10 rationales requires qualitative comparison that
+# cannot be reduced to a Python threshold.
+# ---------------------------------------------------------------------------
+
+QUALITY_GATE_PROMPT_TEMPLATE = """You are reviewing {count} M&A acquirer rationale \
+summaries before final PDF delivery to a Managing Director. Your job is to identify \
+the 0–3 weakest rationales that should be re-generated.
+
+RATIONALE SUMMARIES (Section 2 preview, conviction sentence, risk flag names):
+{rationale_summaries}
+
+QUALITY CRITERIA — flag a rationale as weak ONLY if it clearly fails one of these:
+
+1. CITATION DENSITY: section_2_citation_count < 2 AND the section_2_preview reads like \
+   generic boilerplate — no acquirer-specific argument, no named deals, no sub-sector \
+   claims (e.g. "X is well-positioned to leverage synergies in healthcare..." with no data).
+
+2. TEMPLATE RECYCLING: Two or more rationales share nearly identical Section 2 opening \
+   constructions or the same key phrase repeated across acquirers. Flag the weakest \
+   duplicate — not all of them.
+
+3. THIN CONVICTION: The conviction_rationale is under 35 words, or both sentences are \
+   generic with no specific numbers and no acquirer-differentiating claim.
+
+4. RISK FLAG LABELS ONLY: Both risk_flag_names are bare category labels with no embedded \
+   data (e.g. ["Deal Size Mismatch", "Valuation Premium"] — no ratio, no multiple, no \
+   named deal). Valid names contain specific numbers: "2.3× Above Median Deal Size" or \
+   "Above-Market Payer — 16.2x vs 11.7x market median".
+
+Flag AT MOST 3 rationales — only clear failures. If the shortlist is generally solid \
+with minor imperfections, return an empty list. Do not flag rationales that are merely \
+average; only flag genuine quality failures that would embarrass the analysis.
+
+Return ONLY valid JSON, no other text:
+
+If quality is acceptable:
+{{
+  "routing": "proceed_to_pdf",
+  "weak_acquirers": [],
+  "issues": {{}},
+  "reasoning": "1-2 sentences on overall quality."
+}}
+
+If 1–3 rationales need regeneration:
+{{
+  "routing": "regenerate_weak",
+  "weak_acquirers": ["Acquirer Name"],
+  "issues": {{
+    "Acquirer Name": "specific issue — which criterion failed and what was wrong"
+  }},
+  "reasoning": "1-2 sentences explaining why these were flagged."
+}}
+"""
