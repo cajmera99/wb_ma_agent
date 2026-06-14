@@ -132,7 +132,7 @@ The 500-row CSV is loaded **once at server startup** — never re-read during a 
 
 ### LLM Prompt Structure
 
-Three prompt templates live in `backend/agent/prompts.py`:
+Four prompt templates live in `backend/agent/prompts.py`:
 
 **1. `SYSTEM_PROMPT`** — Applied to every LLM call. Establishes the senior M&A analyst persona and sets non-negotiable rules: all claims must cite specific numbers, forbidden phrases are listed explicitly (e.g. "demonstrates their capability", "track record of acquisitions", attributing EBITDA margins to the current target), and Strategic vs. Financial Sponsor theses must be framed differently.
 
@@ -142,11 +142,13 @@ Three prompt templates live in `backend/agent/prompts.py`:
 - Acquirer profile with **pre-computed citation anchors**: exact deal count in the target sector, count of deals in the comparable size band (0.5×–2.0× target EV), full deal size range, complete sector breakdown — enabling the sentence pattern "completed 6 Healthcare Services deals in the $100–$400M range at a median 12.5× EV/EBITDA"
 - 5 precedent deals (sector-relevant first via two-pass fetch)
 - Market EV/EBITDA and EV/Revenue comps
-- **Python-computed anomaly signals** injected as `⚠`/`✓` markers: deal size routing, completion rate gate, ownership mismatch, valuation posture (above/below/at-market with pre-computed turn differences and correct percentage denominators), oversized precedent deal disclosures, and an unconditional EBITDA attribution block
+- **Python-computed anomaly signals** injected as `⚠`/`✓` markers: deal size routing, completion rate gate, ownership mismatch, valuation posture (above/below/at-market with pre-computed turn differences and correct percentage denominators), oversized precedent deal disclosures, and an acquirer-type EBITDA differentiation signal (PE sponsors receive IRR/return-on-capital framing using the acquirer's historical acquired-company margins; strategics receive a margin comparison frame)
 
 The anomaly signal design is intentional: long instruction-only forbidden lists get skimmed by smaller models. Injecting pre-computed values as attention markers (`⚠ ABOVE-MARKET PAYER: ... use EXACTLY: 'Above-Market Payer — 16.2x historical median vs 11.7x market median (+4.5 turns, +38% above market)'`) eliminates the class of errors where the LLM invents its own numbers.
 
-A **post-generation regex scan** checks all text fields for the forbidden EBITDA attribution phrase. If detected, a targeted repair call is fired with the exact violation quoted — more reliable than preemptive instructions alone.
+A **post-generation regex scan** checks all text fields for generic EBITDA boilerplate (e.g. "the target's EBITDA margins complement / align with / support…"). If detected, a targeted repair call is fired redirecting toward acquirer-specific framing — more reliable than preemptive instructions alone.
+
+**4. `QUALITY_GATE_PROMPT_TEMPLATE`** — Used by GPT-4o-mini in `quality_gate`. Receives compact summaries of all 10 rationales and identifies 0–3 weak ones across four criteria: citation density, template recycling across acquirers, thin conviction, and bare risk flag labels with no embedded numbers. Returns a JSON routing decision. Flagging at most 3 is enforced in Python regardless of LLM output.
 
 ### Scoring Model (6 Dimensions)
 
