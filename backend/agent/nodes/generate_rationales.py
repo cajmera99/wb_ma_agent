@@ -364,6 +364,14 @@ async def _generate_one(
     most_recent_platform_year = candidate.get("most_recent_platform_year")
     platform_display = str(most_recent_platform_year) if most_recent_platform_year else "None in dataset"
 
+    # The profiler's adjacent_sector_deals count includes the target sector itself when
+    # the target sector appears in ADJACENT_SECTORS (e.g. Healthcare Services). Subtract
+    # primary sector deals so the prompt doesn't double-count the same deals.
+    adjacent_sector_deals_display = max(
+        0,
+        candidate.get("adjacent_sector_deals", 0) - primary_sector_deal_count,
+    )
+
     prompt = RATIONALE_PROMPT_TEMPLATE.format(
         anomaly_flags=anomaly_flags,
         co_acquirer_context=co_acquirer_context,
@@ -379,7 +387,7 @@ async def _generate_one(
         total_deals=candidate.get("total_deals", 0),
         closed_deals=candidate.get("closed_deals", 0),
         primary_sector_deal_count=primary_sector_deal_count,
-        adjacent_sector_deals=candidate.get("adjacent_sector_deals", 0),
+        adjacent_sector_deals=adjacent_sector_deals_display,
         deals_near_target=deals_near_target,
         target_size_band=target_size_band,
         deal_size_range=deal_size_range,
@@ -489,7 +497,7 @@ async def _generate_one(
     # occasionally. A targeted repair with the exact violation quoted is more
     # reliable than another instruction — the model responds to "here is what you
     # wrote and here is why it is wrong" better than a preemptive warning.
-    _ebitda_re = re.compile(r"the\s+target'?s\s+(?:strong\s+)?ebitda", re.IGNORECASE)
+    _ebitda_re = re.compile(r"(?:the|this)\s+target'?s\s+(?:strong\s+)?ebitda", re.IGNORECASE)
     _scan_text = " ".join(filter(None, [
         result.get("acquirer_overview", ""),
         result.get("strategic_fit_thesis", ""),

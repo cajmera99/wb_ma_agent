@@ -268,6 +268,10 @@ Sentence 3 (if applicable): platform cadence or rollup activity if the data supp
 Do not describe them generically — every sentence must cite a number or named data point.
 
 SECTION 2 — STRATEGIC FIT THESIS
+Length: 3–4 sentences maximum. Every sentence must earn its place with a specific \
+number, named deal, or data point. Stop when you have made the case — do not add \
+trailing context sentences to round out the section.
+
 Before writing: ask what does THIS acquirer see in this target that a different \
 buyer cannot execute as well? That answer is your opening sentence — not a \
 target attribute and not geographic expansion.
@@ -322,11 +326,15 @@ then build 3-4 sentences of evidence around it:
    concentration, regional footprint, or service line capability that THIS sponsor's \
    particular platform iteration brings, and explain concretely why that makes them a \
    preferred seller to that exit buyer versus other sponsors in this auction. \
-   FORBIDDEN exit language: "would likely pay a premium for the expanded service offerings \
-   and regional presence this acquisition would provide" — this phrase is banned because \
-   it describes every sponsor in the report identically and is not analysis. The same \
-   exit buyer may be cited by multiple sponsors only if EACH rationale articulates a \
-   different, deal-specific reason that buyer would prefer that sponsor's platform. \
+   FORBIDDEN exit language (HARD PROHIBITION — any of these in the output is a failure): \
+   "would likely pay a premium for the expanded service offerings and regional presence" / \
+   "would value the expanded service offerings and regional presence" / \
+   "would pay a premium for the [expanded/enhanced] [service offerings/capabilities] and \
+   [regional/geographic] presence" — ALL variants of these phrases are forbidden. \
+   They describe every PE sponsor in this report identically and contain zero \
+   deal-specific reasoning. The same exit buyer may be cited by multiple sponsors only \
+   if EACH rationale articulates a DIFFERENT deal-specific reason that buyer would prefer \
+   THAT sponsor's particular platform over competing sponsors in the same process. \
    Include an expected exit multiple range (e.g., "14–16× EBITDA") supported by the \
    market comp data. If you cannot articulate a differentiated exit argument, name a \
    different strategic buyer from the list whose gap is more specific to this platform.
@@ -393,7 +401,12 @@ do not use the same category for both flags:
       and (c) is invalid regardless of their dominant pattern \
     "They primarily do X but this target is Y" with no named operational consequence is \
     NOT a valid risk flag. When in doubt, use (f), (g), or (h) — those are inherently \
-    more specific to this acquirer's actual competitive situation in this process
+    more specific to this acquirer's actual competitive situation in this process. \
+    MANDATORY CHECK before writing (c): open the PRECEDENT DEALS JSON provided above \
+    and count how many deals of the required type (e.g. "Platform Acquisition", \
+    "Bolt-on Acquisition") already appear in this acquirer's actual deal history. \
+    If that count is ≥2, category (c) is INVALID — proven capability cannot be cited \
+    as a risk. Choose (f), (g), or (h) instead.
 (d) Deal completion track record — cite specific withdrawn or pending deals from the \
     precedent data by name and year. IMPORTANT: withdrawn and terminated deals are \
     PRE-CLOSE failures (regulatory rejection, price disagreement, due diligence collapse) \

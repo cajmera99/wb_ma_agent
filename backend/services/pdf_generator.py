@@ -18,7 +18,7 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.colors import HexColor, black, white
 from reportlab.platypus import (
     SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle,
-    PageBreak, HRFlowable,
+    PageBreak, HRFlowable, KeepInFrame,
 )
 from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_RIGHT
 
@@ -287,6 +287,12 @@ def _build_acquirer_page(rationale: dict, styles: dict, flowables: list) -> None
         flowables.append(PageBreak())
         return
 
+    # Collect this page's content in a local list so it can be wrapped in KeepInFrame.
+    # KeepInFrame(mode='shrink') scales the entire page down proportionally when content
+    # would overflow, preventing the blank extra page that occurs when Section 2 prose
+    # runs long and pushes Section 6 onto a second page.
+    page_content = []
+
     # ── Header Banner ──────────────────────────────────────────────────────────
     header_data = [[
         Paragraph(f"#{rank}  {name}", styles["page_header"]),
@@ -305,8 +311,8 @@ def _build_acquirer_page(rationale: dict, styles: dict, flowables: list) -> None
         ("RIGHTPADDING", (0, 0), (-1, -1), 12),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
     ]))
-    flowables.append(header_table)
-    flowables.append(Spacer(1, 0.1 * inch))
+    page_content.append(header_table)
+    page_content.append(Spacer(1, 0.1 * inch))
 
     # ── Score Grid ─────────────────────────────────────────────────────────────
     sub = rationale.get("sub_scores", {})
@@ -357,22 +363,22 @@ def _build_acquirer_page(rationale: dict, styles: dict, flowables: list) -> None
         ("LINEBELOW",     (0, 0), (-1, 0), 0.5, HexColor("#D0DCF0")),
         ("LINEAFTER",     (0, 0), (1, -1), 0.5, HexColor("#D0DCF0")),
     ]))
-    flowables.append(outer_grid)
-    flowables.append(Spacer(1, 0.1 * inch))
+    page_content.append(outer_grid)
+    page_content.append(Spacer(1, 0.1 * inch))
 
     # ── Section 1: Acquirer Overview ───────────────────────────────────────────
-    flowables.append(Paragraph("1. ACQUIRER OVERVIEW", styles["section_label"]))
-    flowables.append(HRFlowable(width="100%", thickness=0.5, color=WB_BLUE))
-    flowables.append(Paragraph(_esc(rationale.get("acquirer_overview", "")), styles["body"]))
+    page_content.append(Paragraph("1. ACQUIRER OVERVIEW", styles["section_label"]))
+    page_content.append(HRFlowable(width="100%", thickness=0.5, color=WB_BLUE))
+    page_content.append(Paragraph(_esc(rationale.get("acquirer_overview", "")), styles["body"]))
 
     # ── Section 2: Strategic Fit Thesis ────────────────────────────────────────
-    flowables.append(Paragraph("2. STRATEGIC FIT THESIS", styles["section_label"]))
-    flowables.append(HRFlowable(width="100%", thickness=0.5, color=WB_BLUE))
-    flowables.append(Paragraph(_esc(rationale.get("strategic_fit_thesis", "")), styles["body"]))
+    page_content.append(Paragraph("2. STRATEGIC FIT THESIS", styles["section_label"]))
+    page_content.append(HRFlowable(width="100%", thickness=0.5, color=WB_BLUE))
+    page_content.append(Paragraph(_esc(rationale.get("strategic_fit_thesis", "")), styles["body"]))
 
     # ── Section 3: Precedent Activity ──────────────────────────────────────────
-    flowables.append(Paragraph("3. PRECEDENT ACTIVITY  —  last 5 deals shown, sector-relevant first", styles["section_label"]))
-    flowables.append(HRFlowable(width="100%", thickness=0.5, color=WB_BLUE))
+    page_content.append(Paragraph("3. PRECEDENT ACTIVITY  —  last 5 deals shown, sector-relevant first", styles["section_label"]))
+    page_content.append(HRFlowable(width="100%", thickness=0.5, color=WB_BLUE))
 
     deals = rationale.get("precedent_deals", [])[:5]
     if deals:
@@ -401,13 +407,13 @@ def _build_acquirer_page(rationale: dict, styles: dict, flowables: list) -> None
             ("LEFTPADDING", (0, 0), (-1, -1), 5),
             ("GRID", (0, 0), (-1, -1), 0.25, HexColor("#DDDDDD")),
         ]))
-        flowables.append(deals_table)
+        page_content.append(deals_table)
     else:
-        flowables.append(Paragraph("No precedent deal data available.", styles["small"]))
+        page_content.append(Paragraph("No precedent deal data available.", styles["small"]))
 
     # ── Section 4: Valuation Context ───────────────────────────────────────────
-    flowables.append(Paragraph("4. VALUATION CONTEXT", styles["section_label"]))
-    flowables.append(HRFlowable(width="100%", thickness=0.5, color=WB_BLUE))
+    page_content.append(Paragraph("4. VALUATION CONTEXT", styles["section_label"]))
+    page_content.append(HRFlowable(width="100%", thickness=0.5, color=WB_BLUE))
     val = rationale.get("valuation_context", {})
     if val:
         ev_ebitda = val.get("median_ev_ebitda", "N/A")
@@ -419,11 +425,11 @@ def _build_acquirer_page(rationale: dict, styles: dict, flowables: list) -> None
             f"Market median EV/Revenue: <b>{_esc(str(ev_rev))}x</b>  |  "
             f"Based on <b>{count}</b> comparable closed transactions.  {_esc(note)}"
         )
-        flowables.append(Paragraph(val_text, styles["body"]))
+        page_content.append(Paragraph(val_text, styles["body"]))
 
     # ── Section 5: Risk Flags ──────────────────────────────────────────────────
-    flowables.append(Paragraph("5. RISK FLAGS", styles["section_label"]))
-    flowables.append(HRFlowable(width="100%", thickness=0.5, color=WB_BLUE))
+    page_content.append(Paragraph("5. RISK FLAGS", styles["section_label"]))
+    page_content.append(HRFlowable(width="100%", thickness=0.5, color=WB_BLUE))
 
     _severity_order = {"High": 0, "Medium": 1, "Low": 2}
     risk_flags = sorted(
@@ -437,18 +443,23 @@ def _build_acquirer_page(rationale: dict, styles: dict, flowables: list) -> None
             f'<font color="{hex_col}"><b>[{severity}]</b></font> '
             f'<b>{_esc(flag.get("risk_type", "Risk"))}</b> — {_esc(flag.get("description", ""))}'
         )
-        flowables.append(Paragraph(risk_text, styles["body"]))
+        page_content.append(Paragraph(risk_text, styles["body"]))
 
     # ── Section 6: Conviction Level ────────────────────────────────────────────
     hex_conv = CONVICTION_HEX.get(conviction, "#444444")
-    flowables.append(Paragraph("6. CONVICTION LEVEL", styles["section_label"]))
-    flowables.append(HRFlowable(width="100%", thickness=0.5, color=WB_BLUE))
-    flowables.append(Paragraph(
+    page_content.append(Paragraph("6. CONVICTION LEVEL", styles["section_label"]))
+    page_content.append(HRFlowable(width="100%", thickness=0.5, color=WB_BLUE))
+    page_content.append(Paragraph(
         f'<font color="{hex_conv}"><b>{conviction}</b></font>  — '
         f'{_esc(rationale.get("conviction_rationale", ""))}',
         styles["body"],
     ))
 
+    # Wrap in KeepInFrame to enforce hard one-page limit per acquirer.
+    # 9.6" = letter (11") minus top margin (0.6") minus bottom margin (0.6") minus buffer.
+    # mode='shrink' scales content proportionally rather than overflowing to a blank page.
+    kif = KeepInFrame(maxWidth=PAGE_W, maxHeight=9.6 * inch, content=page_content, mode='shrink')
+    flowables.append(kif)
     flowables.append(PageBreak())
 
 
