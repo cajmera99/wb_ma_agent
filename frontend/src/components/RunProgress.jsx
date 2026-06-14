@@ -78,6 +78,13 @@ function formatEvent(evt) {
   if (type === 'rationale.generated') return `${node}#${d.rank} ${d.acquirer} — ${d.conviction} conviction`
   if (type === 'node.completed' && node.includes('rerank')) return `${node}Final 10: ${(d.final_acquirers || []).join(', ')}`
   if (type === 'node.completed' && node.includes('rationale')) return `${node}${d.rationales_generated} generated, ${d.rationales_failed} failed`
+  if (type === 'validation.failed') {
+    const reason = d.error === 'forbidden_ebitda_attribution_detected'
+      ? 'content violation detected — re-generating'
+      : `schema error — re-generating (${(d.error || '').slice(0, 50)})`
+    return `${node}${d.acquirer ? d.acquirer + ': ' : ''}${reason}`
+  }
+  if (type === 'validation.repaired') return `${node}${d.acquirer ? d.acquirer + ': ' : ''}corrected and re-generated ✓`
   if (type === 'run.completed') return `Run complete — PDF ready`
   if (type === 'run.failed') return `Run failed: ${d.error}`
   if (type === 'llm.tokens_used') return `${node}tokens: in=${d.input_tokens} out=${d.output_tokens}`

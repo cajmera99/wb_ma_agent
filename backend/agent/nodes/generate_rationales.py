@@ -523,6 +523,7 @@ async def _generate_one(
             emitter.emit(EventType.VALIDATION_REPAIRED, node="generate_rationales", data={
                 "acquirer": acquirer_name
             })
+            logger.info("ebitda_repair_succeeded", acquirer=acquirer_name)
             result = _repaired.model_dump()
             result["rank"] = rank
             result["sub_scores"] = sub_scores
