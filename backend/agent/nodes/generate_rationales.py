@@ -518,11 +518,14 @@ async def _generate_one(
             if conviction_baseline in ("Medium", "Low"):
                 _s6_note = (
                     f" SECTION 6: The above-market multiple is a RISK, not a competitive advantage. "
-                    f"FORBIDDEN in Section 6 Sentence 1: 'indicates a willingness to pay above market, "
-                    f"which could enhance their competitive position' — this inverts the risk. "
-                    f"For {conviction_baseline} conviction frame the {acq_str} median as pricing tension: "
-                    f"they may win the auction but at the cost of IRR compression against the "
-                    f"{mkt_str} market — that spread IS the gap-closing condition for Sentence 2."
+                    f"NEVER use 'willingness to pay' or 'willingness to pursue' framing anywhere in "
+                    f"Section 6 — the multiple is pricing DATA that creates IRR tension, not evidence "
+                    f"of intent or motivation. For {conviction_baseline} conviction lead with the "
+                    f"IRR consequence: their {acq_str} historical comfort sits +{turns_diff} turns above "
+                    f"market; winning at that level means accepting compressed exit returns against the "
+                    f"{mkt_str} market comp — name that spread as the gap-closing condition for Sentence 2. "
+                    f"Do NOT frame the above-market posture as a signal of strategic conviction or "
+                    f"competitive advantage."
                 )
             anomaly_parts.append(
                 f"⚠ ABOVE-MARKET PAYER: Historical median EV/EBITDA {acq_str} is "
@@ -811,15 +814,19 @@ async def _generate_one(
     # Scan runs on the current result (after any EBITDA repair) so it catches
     # phrases introduced by the EBITDA repair as well as first-pass output.
     _filler_re = re.compile(
-        # Catches four categories of persistent filler:
+        # Catches six categories of persistent filler:
         # 1. "positions [name/them] uniquely [to/as/...]" — classic opener
         # 2. "fill(s/ing) [0-4 words] gap" — all "fills a [X] gap" variants
         # 3. "illustrate[s] their focus on [expanding/this sector]"
-        # 4. "provide[s] a solid/strong/firm/good foundation" — conviction boilerplate
+        # 4. "provide[s] a solid/strong foundation" — named-adjective boilerplate
+        # 5. "provide[s] a [adj]? foundation/base for" — catches "solid base" and bare "foundation for"
+        # 6. "positions [name/them] as a relevant/credible buyer" — evaluation template
         r"positions\s+(?:\w+\s+){1,3}uniquely\b"
         r"|fill(?:s|ing)?\s+(?:[\w-]+\s+){0,4}gap\b"
         r"|illustrates?\s+their\s+(?:focus|commitment|strategy)\s+on\b"
-        r"|provides?\s+a\s+(?:solid|strong|firm|good)\s+foundation\b",
+        r"|provides?\s+a\s+(?:solid|strong|firm|good)\s+foundation\b"
+        r"|provides?\s+a\s+(?:(?:solid|strong|firm|good)\s+)?(?:foundation|base)\s+for\b"
+        r"|positions?\s+\w+(?:\s+\w+)?\s+as\s+a\s+(?:relevant|credible|valid|viable|suitable)\s+(?:buyer|acquirer|candidate|bidder)\b",
         re.IGNORECASE,
     )
     _filler_scan = " ".join(filter(None, [
@@ -954,6 +961,38 @@ async def _generate_one(
         if _thesis_deduped != _thesis:
             logger.warning("duplicate_sentence_removed_from_thesis", acquirer=acquirer_name)
             result["strategic_fit_thesis"] = _thesis_deduped
+
+    # Risk flag correction: remove flags that contradict the anomaly signals.
+    # Category (e) misuse: LLM flags "completion rate" as a risk when outcome_score >= 70
+    #   (high completion is a positive — the prompt blocks this, but catch stragglers).
+    # Category (b) misuse: LLM flags "deal size mismatch" when AT-SIZE signal was emitted
+    #   (AT-SIZE means the ratio is 0.5–1.5x, i.e., not a genuine risk).
+    # Only removes a flag when >= 2 valid flags remain (preserves min_length=2 constraint).
+    _risk_flags = result.get("risk_flags", [])
+    if _risk_flags:
+        _anomaly_str = " ".join(anomaly_parts)
+        _corrected_flags = []
+        for _rf in _risk_flags:
+            _rt = _rf.get("risk_type", "") if isinstance(_rf, dict) else getattr(_rf, "risk_type", "")
+            _is_bad_completion = (
+                outcome_score >= 70
+                and bool(re.search(r'\bcompletion\b|\btrack record\b', _rt, re.IGNORECASE))
+            )
+            _is_bad_size = (
+                ("AT-SIZE DEAL:" in _anomaly_str or "AT-SIZE (RANGE COVERS" in _anomaly_str)
+                and bool(re.search(r'deal size|size mismatch|above median', _rt, re.IGNORECASE))
+            )
+            if _is_bad_completion or _is_bad_size:
+                logger.warning(
+                    "risk_flag_invalid_category_removed",
+                    acquirer=acquirer_name,
+                    risk_type=_rt,
+                    reason="completion_rate_positive" if _is_bad_completion else "size_at_size_band",
+                )
+            else:
+                _corrected_flags.append(_rf)
+        if len(_corrected_flags) >= 2:
+            result["risk_flags"] = _corrected_flags
 
     return result
 

@@ -480,6 +480,15 @@ do not use the same category for both flags:
     IRR without synergy requirements and can price more aggressively on headline EV. \
     Name the specific competing acquirer types most likely to show up in this process.
 
+Every Section 5 flag must describe a genuine obstacle to deal completion or value creation. \
+A positive attribute — strong completion history, at-size deal experience, demonstrated sector \
+focus — belongs in Section 1 or Section 2, not Section 5. Category (e) is only valid when the \
+outcome signal explicitly warns of low completion (outcome score < 70); writing it to celebrate \
+a 100% track record is analytically inverted. Category (b) is only valid when the deal size \
+signal is a GENUINE STRETCH (the AT-SIZE signal blocks it explicitly); a 1.0x–1.5x ratio is \
+not a risk — it is confirmation of fit. When a category is blocked by the signal above, choose \
+a genuinely applicable alternative rather than forcing a blocked category.
+
 The risk NAME must embed the ACTUAL numbers from THIS acquirer's data — do not copy \
 any example name verbatim. Format: "[X]× Above Median Deal Size" where X is the real \
 ratio you computed from the data above; for completion rate use "[N_closed] of [M_total] \
