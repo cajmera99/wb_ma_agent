@@ -700,50 +700,64 @@ async def _generate_one(
         result.get("valuation_context", {}).get("note", "") if isinstance(result.get("valuation_context"), dict) else "",
     ] + [rf.get("description", "") for rf in result.get("risk_flags", []) if isinstance(rf, dict)]))
 
-    _filler_match = _filler_re.search(_filler_scan)
-    if _filler_match:
-        _phrase = _filler_match.group(0)
-        logger.warning("forbidden_filler_phrase_detected_triggering_repair", acquirer=acquirer_name, phrase=_phrase)
-        emitter.emit(EventType.VALIDATION_FAILED, node="generate_rationales", data={
-            "acquirer": acquirer_name, "error": "forbidden_filler_phrase_detected"
-        })
-        _filler_repair_msg = HumanMessage(content=(
-            f"CONTENT VIOLATION — your response must be corrected before delivery.\n\n"
-            f"The phrase '{_phrase}' (or a close variant) appears in your output. "
-            "This is a banned filler phrase that contains zero analysis and reads "
-            "identically across every acquirer on the shortlist.\n\n"
-            "REQUIRED replacement — write one of these instead, using the specific "
-            "numbers from the evidence packet you already received:\n"
-            "  FOR 'positions them/[name] uniquely': cite the exact deal count in this "
-            "sub-sector and contrast with other acquirers. e.g. '4 of 24 deals in "
-            "Healthcare Services concentrated in [sub-sector] make this a direct platform "
-            "extension, unlike the other sponsors on this shortlist with 0–1 sector deals.'\n"
-            "  FOR 'fills a critical/specific/key gap' or 'fills a gap': name the absent "
-            "sub-sector from sub_sector_counts, then explain why this acquirer specifically "
-            "needs it. e.g. '[Acquirer] has 0 Home Health deals across 4 Healthcare Services "
-            "acquisitions — this target adds the one sub-sector absent from their platform.'\n"
-            "  FOR 'adds a critical capability': replace with the actual capability name and "
-            "the deal-count evidence that the acquirer currently lacks it.\n\n"
-            "FORBIDDEN AS REPLACEMENTS (equally banned — will trigger another rejection):\n"
-            "  - 'the/this target's EBITDA margins complement / align with / support / enhance'\n"
-            "  - Any other 'fills a [X] gap' or 'fills a critical need for' construction\n"
-            "  - 'adds a critical [X] capability'\n\n"
-            "Produce a corrected full response — all other sections unchanged."
-        ))
-        try:
-            _filler_repaired = await _call_structured_with_retry(llm_structured, messages + [_filler_repair_msg])
-            emitter.emit(EventType.VALIDATION_REPAIRED, node="generate_rationales", data={
-                "acquirer": acquirer_name
-            })
-            logger.info("filler_phrase_repair_succeeded", acquirer=acquirer_name)
-            result = _filler_repaired.model_dump()
-            result["rank"] = rank
-            result["sub_scores"] = sub_scores
-            result["composite_score"] = candidate.get("composite_score", result.get("composite_score", 0))
-            result["conviction_level"] = conviction_baseline
-        except Exception as _filler_repair_err:
-            logger.error("filler_phrase_repair_failed", acquirer=acquirer_name, error=str(_filler_repair_err))
-            # Keep current result — better than a stub
+    if _filler_re.search(_filler_scan):
+        # Python sentence substitution — no LLM call, no cascade.
+        # The LLM repair for this phrase consistently introduced new violations;
+        # a template built from pre-computed deal-count data is both faster and
+        # more reliable. Replaces the offending sentence in strategic_fit_thesis
+        # and conviction_rationale with an acquirer-specific data-anchored sentence.
+        logger.warning("forbidden_filler_phrase_detected_applying_python_fix", acquirer=acquirer_name)
+
+        def _replace_filler_sentences(text: str) -> str:
+            if not _filler_re.search(text):
+                return text
+            n = primary_sector_deal_count
+            # adjacent = deals in any sector other than the primary target sector
+            adj = sum(
+                v for k, v in candidate.get("sector_counts", {}).items()
+                if k != target.sector
+            )
+            sec = target.sector
+            parts = re.split(r'(?<=[.!?])\s+', text.strip())
+            fixed = []
+            for sent in parts:
+                if _filler_re.search(sent):
+                    if n == 0 and adj > 0:
+                        fixed.append(
+                            f"{acquirer_name} has {adj} deals in adjacent healthcare sectors "
+                            f"but none in {sec} — this target is their first direct sector entry, "
+                            f"a meaningful concentration step given {total} total acquisitions."
+                        )
+                    elif n == 0:
+                        fixed.append(
+                            f"Of {total} total deals, {acquirer_name} has none in {sec}, "
+                            f"making this target their first direct sector acquisition."
+                        )
+                    elif n == 1:
+                        fixed.append(
+                            f"{acquirer_name}'s single prior {sec} acquisition establishes "
+                            f"direct sector experience; this target doubles their presence "
+                            f"in the sector across {total} total deals."
+                        )
+                    else:
+                        fixed.append(
+                            f"{acquirer_name}'s {n} prior {sec} acquisitions out of "
+                            f"{total} total deals establish direct sector focus; "
+                            f"this target extends that concentration."
+                        )
+                else:
+                    fixed.append(sent)
+            return " ".join(fixed)
+
+        result["strategic_fit_thesis"] = _replace_filler_sentences(
+            result.get("strategic_fit_thesis", "")
+        )
+        result["conviction_rationale"] = _replace_filler_sentences(
+            result.get("conviction_rationale", "")
+        )
+        result["acquirer_overview"] = _replace_filler_sentences(
+            result.get("acquirer_overview", "")
+        )
 
     return result
 
