@@ -682,6 +682,69 @@ async def _generate_one(
             logger.error("ebitda_repair_failed", acquirer=acquirer_name, error=str(_ebitda_repair_err))
             # Keep original result — better than a stub
 
+    # Post-generation scan for forbidden filler phrases.
+    # Prompt-layer instructions alone do not reliably suppress these from gpt-4o-mini.
+    # Scan runs on the current result (after any EBITDA repair) so it catches
+    # phrases introduced by the EBITDA repair as well as first-pass output.
+    _filler_re = re.compile(
+        r"positions\s+(?:\w+\s+){1,3}uniquely\b"
+        r"|fills?\s+a\s+(?:critical|specific|key|unique|strategic)\b"
+        r"|fills?\s+a\s+gap\b"
+        r"|adds?\s+a\s+critical\b",
+        re.IGNORECASE,
+    )
+    _filler_scan = " ".join(filter(None, [
+        result.get("acquirer_overview", ""),
+        result.get("strategic_fit_thesis", ""),
+        result.get("conviction_rationale", ""),
+        result.get("valuation_context", {}).get("note", "") if isinstance(result.get("valuation_context"), dict) else "",
+    ] + [rf.get("description", "") for rf in result.get("risk_flags", []) if isinstance(rf, dict)]))
+
+    _filler_match = _filler_re.search(_filler_scan)
+    if _filler_match:
+        _phrase = _filler_match.group(0)
+        logger.warning("forbidden_filler_phrase_detected_triggering_repair", acquirer=acquirer_name, phrase=_phrase)
+        emitter.emit(EventType.VALIDATION_FAILED, node="generate_rationales", data={
+            "acquirer": acquirer_name, "error": "forbidden_filler_phrase_detected"
+        })
+        _filler_repair_msg = HumanMessage(content=(
+            f"CONTENT VIOLATION — your response must be corrected before delivery.\n\n"
+            f"The phrase '{_phrase}' (or a close variant) appears in your output. "
+            "This is a banned filler phrase that contains zero analysis and reads "
+            "identically across every acquirer on the shortlist.\n\n"
+            "REQUIRED replacement — write one of these instead, using the specific "
+            "numbers from the evidence packet you already received:\n"
+            "  FOR 'positions them/[name] uniquely': cite the exact deal count in this "
+            "sub-sector and contrast with other acquirers. e.g. '4 of 24 deals in "
+            "Healthcare Services concentrated in [sub-sector] make this a direct platform "
+            "extension, unlike the other sponsors on this shortlist with 0–1 sector deals.'\n"
+            "  FOR 'fills a critical/specific/key gap' or 'fills a gap': name the absent "
+            "sub-sector from sub_sector_counts, then explain why this acquirer specifically "
+            "needs it. e.g. '[Acquirer] has 0 Home Health deals across 4 Healthcare Services "
+            "acquisitions — this target adds the one sub-sector absent from their platform.'\n"
+            "  FOR 'adds a critical capability': replace with the actual capability name and "
+            "the deal-count evidence that the acquirer currently lacks it.\n\n"
+            "FORBIDDEN AS REPLACEMENTS (equally banned — will trigger another rejection):\n"
+            "  - 'the/this target's EBITDA margins complement / align with / support / enhance'\n"
+            "  - Any other 'fills a [X] gap' or 'fills a critical need for' construction\n"
+            "  - 'adds a critical [X] capability'\n\n"
+            "Produce a corrected full response — all other sections unchanged."
+        ))
+        try:
+            _filler_repaired = await _call_structured_with_retry(llm_structured, messages + [_filler_repair_msg])
+            emitter.emit(EventType.VALIDATION_REPAIRED, node="generate_rationales", data={
+                "acquirer": acquirer_name
+            })
+            logger.info("filler_phrase_repair_succeeded", acquirer=acquirer_name)
+            result = _filler_repaired.model_dump()
+            result["rank"] = rank
+            result["sub_scores"] = sub_scores
+            result["composite_score"] = candidate.get("composite_score", result.get("composite_score", 0))
+            result["conviction_level"] = conviction_baseline
+        except Exception as _filler_repair_err:
+            logger.error("filler_phrase_repair_failed", acquirer=acquirer_name, error=str(_filler_repair_err))
+            # Keep current result — better than a stub
+
     return result
 
 
