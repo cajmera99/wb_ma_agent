@@ -76,6 +76,9 @@ export default function TargetForm({ onRunStarted, loading, historicalTarget, on
         profile_description: historicalTarget.profile_description || DEFAULTS.profile_description,
       })
       setEditMode(false)
+    } else {
+      // historicalTarget cleared (from sidebar or form button) — always unlock
+      setEditMode(true)
     }
   }, [historicalTarget])
 
