@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 
 const S = {
   card: {
@@ -85,17 +85,27 @@ export default function TargetForm({ onRunStarted, loading, formLocked, historic
   const fieldDisabled = formLocked || !editMode || loading
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
 
+  // Ref-based in-flight guard: flips synchronously before the first await so a
+  // second submit (e.g. Enter key in field + button click) is blocked immediately,
+  // without waiting for React to re-render formLocked from the parent.
+  const submittingRef = useRef(false)
+
   const handleSubmit = async (e) => {
     e.preventDefault()
-    if (formLocked || !editMode || loading) return  // guard against double-submit race
-    const body = { ...form, deal_size_mm: parseFloat(form.deal_size_mm) }
-    const res = await fetch('/api/analyze', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    })
-    const data = await res.json()
-    onRunStarted(data.run_id, data.stream_url)
+    if (formLocked || !editMode || loading || submittingRef.current) return
+    submittingRef.current = true
+    try {
+      const body = { ...form, deal_size_mm: parseFloat(form.deal_size_mm) }
+      const res = await fetch('/api/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      const data = await res.json()
+      onRunStarted(data.run_id, data.stream_url)
+    } finally {
+      submittingRef.current = false
+    }
   }
 
   const isViewing = !editMode && !!historicalTarget
