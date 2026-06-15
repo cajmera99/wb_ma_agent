@@ -14,7 +14,7 @@ The full stack (FastAPI + React) runs as a single container. Open the URL, fill 
 
 API docs (Swagger): **[https://wbmaagent-production.up.railway.app/docs](https://wbmaagent-production.up.railway.app/docs)**
 
-**If for some reason the website and/or its ability to download a file is being blocked by the intranet firewall, I have attached a sample pdf file in the root of the repo.**
+**If for some reason the website and/or the ability to download a file is being blocked by the intranet firewall, I have attached a sample pdf file in the root of the repo.**
 
 ---
 
