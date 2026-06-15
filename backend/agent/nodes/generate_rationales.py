@@ -201,11 +201,16 @@ async def _generate_one(
     if acquirer_type == "Financial Sponsor" and co_strategics:
         co_list = "\n".join(f"  - {name}" for name in co_strategics)
         co_acquirer_context = (
-            "STRATEGIC CO-ACQUIRERS IN THIS ANALYSIS (use as exit buyer candidates)\n"
-            "------------------------------------------------------------------------\n"
-            "These strategic buyers appear in the same 10-acquirer shortlist. For the\n"
-            "exit optionality statement in Section 2, name at least one specifically\n"
-            "and explain why they would pay a premium for what this PE firm is building:\n"
+            "STRATEGIC BUYERS IN THIS ANALYSIS (competing direct bidders — context only)\n"
+            "---------------------------------------------------------------------------\n"
+            "These buyers appear in the same 10-acquirer shortlist as DIRECT COMPETING\n"
+            "BIDDERS. They can win this asset at market price without paying a PE IRR\n"
+            "premium. Do NOT name them as exit buyers unless you explain concretely what\n"
+            "the PE hold creates over 4–5 years that they cannot get by winning today's\n"
+            "auction directly. For Section 2 exit optionality, name the CATEGORY of\n"
+            "strategic exit buyer (e.g., 'a national integrated health system at 13–15x\n"
+            "EBITDA') — not a specific company from this list by default. Use this list\n"
+            "only to understand the competitive buyer landscape:\n"
             + co_list + "\n\n"
         )
     else:
@@ -620,14 +625,14 @@ async def _generate_one(
     _ebitda_re = re.compile(
         # Catches generic boilerplate: "the/this target's [strong] EBITDA margins [verb]"
         # where the verb is standalone-generic (no acquirer-specific data needed to complete
-        # the thought). "will enhance their valuation model AT X.Xx" is acquirer-specific
-        # and should NOT be caught — so "will/can" are excluded. "would/should/can" plus
-        # "enhance/complement/align/support" ARE included since those constructions appear
-        # independent of any specific data point.
+        # the thought). Informative uses that reference the acquirer's own data are permitted
+        # and pass. Added "will" and "provide" to catch "will enhance their valuation model"
+        # and "provide a compelling entry point" which bypassed the original pattern.
         r"(?:the|this)\s+target'?s\s+(?:strong\s+)?ebitda\s+margins?\s+"
-        r"(?:complement|align\s+with|support|enhance|are\s+consistent\s+with"
-        r"|(?:would|can|should)\s+(?:improve|support|enhance|complement|align"
-        r"|benefit|strengthen)|are\s+attractive|are\s+aligned)",
+        r"(?:complement|align\s+with|support|enhance|provide"
+        r"|are\s+consistent\s+with|are\s+attractive|are\s+aligned"
+        r"|(?:will|would|can|should)\s+(?:improve|support|enhance|complement|align"
+        r"|benefit|strengthen|provide))",
         re.IGNORECASE,
     )
     _scan_text = " ".join(filter(None, [
@@ -694,10 +699,14 @@ async def _generate_one(
     # Scan runs on the current result (after any EBITDA repair) so it catches
     # phrases introduced by the EBITDA repair as well as first-pass output.
     _filler_re = re.compile(
-        # Only catch the most egregious and persistent filler — "positions [name/them]
-        # uniquely [to/as/...]". "fills a gap" variants are addressed by the prompt;
-        # enforcing them post-gen triggers too many repairs on thin-sector acquirers.
-        r"positions\s+(?:\w+\s+){1,3}uniquely\b",
+        # Catches two categories of persistent filler:
+        # 1. "positions [name/them] uniquely [to/as/...]" — the most common opener
+        # 2. "fill(s/ing) [optional modifiers] gap" — e.g. "fills a critical sub-sector gap",
+        #    "fills a gap in their portfolio", "filling a gap in the target sector" — all
+        #    variants that escaped prompt-level bans. The {0,4} allows up to 4 modifiers
+        #    between "fill*" and "gap" (e.g., "fills a critical sub-sector portfolio gap").
+        r"positions\s+(?:\w+\s+){1,3}uniquely\b"
+        r"|fill(?:s|ing)?\s+(?:[\w-]+\s+){0,4}gap\b",
         re.IGNORECASE,
     )
     _filler_scan = " ".join(filter(None, [
@@ -744,7 +753,7 @@ async def _generate_one(
                         fixed.append(
                             f"{acquirer_name}'s single prior {sec} acquisition establishes "
                             f"direct sector experience; this target doubles their presence "
-                            f"in the sector across {total} total deals."
+                            f"in the sector across {total} total {'deal' if total == 1 else 'deals'}."
                         )
                     else:
                         fixed.append(

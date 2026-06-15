@@ -59,9 +59,11 @@ Explicitly forbidden phrases — these will be flagged as failures if they appea
   affinity scores or adjacency weighted composites — those are not raw counts.
 - "credible buyer" or "credible acquirer" in any form — replace with the specific \
   data combination that earns the label: deal count, size calibration, multiple alignment
-- "fills a critical [X] gap" / "fills a specific [X] gap" / "fills a sub-sector gap" \
-  in Sections 5–6 — the gap belongs in Section 2 only; citing it again in conviction \
-  or risk is circular reasoning, not analysis
+- "fills a critical [X] gap" / "fills a specific [X] gap" / "fills a sub-sector gap" / \
+  "fills a gap in their portfolio" / "fills the [sub-sector] sub-sector" / \
+  "filling a gap in their portfolio for [X]" — in ANY section. These observations are \
+  not analysis. Name the specific absent sub-sector from sub_sector_counts and explain \
+  what acquiring it enables for THIS buyer that a different buyer cannot claim.
 - "positions them [well / as a credible buyer / to integrate / to capitalize]" — \
   always replace with what the data shows they can actually do
 - "[Acquirer]'s [sector] affinity and recent acquisition cadence position them" — \
@@ -332,25 +334,27 @@ then build 3-4 sentences of evidence around it:
 4. CROSS-SECTOR CASE: If sector affinity score < 20, explicitly acknowledge no prior \
    history in {sector} and make the transferable case from rationale tags and deal size. \
    Do not fabricate sector experience.
-5. EXIT OPTIONALITY (Financial Sponsors only — required, not optional): Name at least \
-   one SPECIFIC strategic acquirer from the STRATEGIC CO-ACQUIRERS list provided above. \
-   The exit argument must be specific to THIS sponsor's platform build — not a generic \
-   statement that applies to any PE buyer in this sector. Name the exact sub-sector \
-   concentration, regional footprint, or service line capability that THIS sponsor's \
-   particular platform iteration brings, and explain concretely why that makes them a \
-   preferred seller to that exit buyer versus other sponsors in this auction. \
+5. EXIT OPTIONALITY (Financial Sponsors only — required, not optional): \
+   The strategic co-acquirers listed above are COMPETING DIRECT BIDDERS in this same \
+   auction. A buyer who can win this asset today at market price will not pay a PE \
+   sponsor's IRR markup for the same asset 4–5 years later — unless the PE hold creates \
+   something materially different (broader geographic footprint, additional service lines, \
+   EBITDA at a scale they cannot buy directly today). \
+   Name the CATEGORY of strategic exit buyer (e.g., "a national integrated health system \
+   at 13–15× EBITDA" or "a managed care platform") — NOT a specific company by name from \
+   the co-acquirers list unless you explain CONCRETELY what the PE hold creates that the \
+   buyer cannot obtain by winning the initial auction themselves. The specific platform \
+   build — sub-sector additions, EBITDA scaling, geographic density — is the exit \
+   argument, not the identity of the buyer. Include an expected exit multiple range \
+   supported by the market comp data. \
    FORBIDDEN exit language (HARD PROHIBITION — any of these in the output is a failure): \
-   "would likely pay a premium for the expanded service offerings and regional presence" / \
-   "would value the expanded service offerings and regional presence" / \
+   "could attract strategic buyers like [Name]" without the specific platform-build \
+   differentiation argument above / \
+   "would value the regional presence and service line expansion" / \
    "would pay a premium for the [expanded/enhanced] [service offerings/capabilities] and \
    [regional/geographic] presence" — ALL variants of these phrases are forbidden. \
    They describe every PE sponsor in this report identically and contain zero \
-   deal-specific reasoning. The same exit buyer may be cited by multiple sponsors only \
-   if EACH rationale articulates a DIFFERENT deal-specific reason that buyer would prefer \
-   THAT sponsor's particular platform over competing sponsors in the same process. \
-   Include an expected exit multiple range (e.g., "14–16× EBITDA") supported by the \
-   market comp data. If you cannot articulate a differentiated exit argument, name a \
-   different strategic buyer from the list whose gap is more specific to this platform.
+   deal-specific reasoning.
 
 Every sentence must contain at least one number, named deal, or cited data point. \
 No sentence may be the last sentence if it contains no data. \
@@ -475,82 +479,85 @@ Assign severity (High / Medium / Low) based on how materially it affects deal pr
 SECTION 6 — CONVICTION LEVEL
 The conviction level for this acquirer is: {conviction_baseline}
 
-Do not change this level. Write exactly 2 sentences (hard limit).
+Do not change this level. Write exactly 2 sentences.
 
-These 2 sentences are a synthesis of everything established in Sections 1–5 — \
-NOT a recap of one precedent deal and NOT a restatement of Section 5. \
-A Managing Director reading only Section 6 should understand: \
-(1) why this acquirer is a natural fit for this specific target, and \
-(2) what single constraint most limits confidence in deal completion.
+This is the Managing Director's closing call on this acquirer — not a balanced scorecard \
+and not a Section 5 restatement. The MD has already read Sections 1–5. These 2 sentences \
+deliver a final verdict: why this buyer is or is not the right fit, and what defines the \
+confidence level. Write as a senior banker who has weighed all 10 acquirers side by side \
+and is giving the deal team a direct recommendation, not a hedge.
 
-SENTENCE 1 — The case for fit: combine at least 2 signals from Sections 1–5, but only \
-signals SPECIFIC TO THIS ACQUIRER'S POSITION on this shortlist — something a different \
-acquirer in this report cannot claim equally. Generic combinations like "sector history + \
-recent cadence" describe multiple acquirers simultaneously and are insufficient on their own. \
-Use what is genuinely differentiating for this buyer: \
-    • Size calibration: if {deals_near_target} deals in the {target_size_band} band is higher \
-      than most peers, that is a real differentiator — name it \
-    • Sector depth: being one of few (or the only) buyer with actual in-sector deal history vs. \
-      adjacent-sector buyers is a specific claim — state the exact count \
-    • Platform cadence precision: cite the exact platform year and bolt-on count; \
-      "active roll-up activity" is not a signal, the number is \
-    • Valuation discipline where peers overpay: being AT-MARKET while the peer group runs 14–17x \
-      is a real thesis advantage — name it \
-    • Ownership experience: if they have a high ratio of private-company acquisitions and the \
-      target is private, cite the specific ownership match score or ratio \
-Do NOT open with "[Acquirer]'s [sector affinity / focus / history] and [recent acquisition \
-cadence] position them" — that construction is banned. Lead instead with a number, a named \
-deal, a market-position comparison, or a buyer-dynamic observation. Make the MD feel they \
-are reading something written specifically about this acquirer, not a form letter.
+TONE BY CONVICTION LEVEL:
 
-SENTENCE 2 — The binding constraint: name the SPECIFIC data point or pattern from Sections \
-1–5 that most limits confidence for THIS acquirer — what keeps conviction exactly where it is \
-and not one level higher. Tie it to a number or named observation, not a generic concern. \
-If valuation direction is the binding constraint, explain WHY the specific magnitude here is \
-particularly limiting for this transaction — do not simply repeat "the valuation gap limits \
-confidence" when that same phrase could apply to half the shortlist. Every acquirer has a \
-distinct limiting factor; find the one that is genuinely most binding for this buyer.
+HIGH — The MD is making a confident recommendation. Sentence 1 synthesises 2–3 converging \
+strengths that make this buyer DISTINCTIVELY suited — not generic "sector experience + \
+recent activity" (which applies to 3–4 peers on this list), but the specific combination \
+that separates this buyer from the others. Sentence 2 names the one real friction point \
+but frames it as BOUNDED AND NAVIGABLE: what that friction does NOT prevent, or why the \
+deal logic holds regardless. \
+CORRECT High framing example: "At {median_ev_ebitda}x historical median they pay above \
+market, but their [N] closed deals at that pricing confirm execution, not just ambition." \
+WRONG High framing: "However, their above-market multiple limits confidence in this \
+acquisition." — the wrong version sounds Medium; High conviction sentence 2 must not \
+undercut the recommendation. The reader should finish feeling confident, not hedged.
 
-Tone calibration:
-- HIGH: Sentence 1 synthesises the convergence of strengths (multiple signals \
-  all point the same direction — sector history, deal size, recency, valuation \
-  alignment, or all four). Sentence 2 names one bounded concern, framed as \
-  manageable — it must not undercut the High label.
-- MEDIUM: Sentence 1 names the strongest case for fit, grounded in 2+ data points. \
-  Sentence 2 names the BINDING constraint — the specific reason this cannot reach \
-  High conviction. Both sentences carry roughly equal weight; the reader should \
-  understand exactly why this is Medium and not High.
-- LOW: Both sentences identify weaknesses. No positive framing. Sentence 1 names \
-  the primary obstacle; Sentence 2 names a second independent obstacle.
+MEDIUM — The MD sees a genuine candidate with a genuine friction. Sentence 1 states the \
+strongest case for this buyer: the specific data point(s) that earned them a shortlist \
+spot. Sentence 2 names the EXACT gap between this buyer and High conviction — what would \
+need to change or resolve for conviction to rise. Both sentences carry roughly equal \
+weight. The reader finishes understanding precisely what holds this back and what unlocks it.
 
-Additional rules:
-- Only use numbers from THIS acquirer's data. Never reuse a multiple or ratio \
-  from a different acquirer.
-- If citing a precedent deal to support Sentence 1 and it is 3× or more larger \
-  than the target EV, you MUST explicitly state the size ratio and what it proves \
-  vs. does not prove — e.g. "their $991M deal proves they can manage a process at \
-  scale, but does not demonstrate size discipline at the $200M level." Silently \
-  citing an oversized deal as proof of fit is not acceptable.
-- Each sentence must stay under 40 words.
+LOW — The MD is skeptical. Sentence 1 names the PRIMARY obstacle: the specific mismatch \
+(size, sector, valuation, track record) that makes this a stretch. Sentence 2 names a \
+SECOND independent obstacle that compounds the first. No positive framing in either \
+sentence. The reader finishes understanding this buyer is a reach, not a fit.
 
-FORBIDDEN in Section 6:
-- "closest precedent in this shortlist" or "closest size and sector precedent" — \
-  every acquirer's precedents are their own closest; the phrase is circular
-- "strong willingness to invest" / "willingness to pay a premium" / "willingness to invest"
-- "reflects their commitment" / "demonstrates their commitment" / \
-  "demonstrates their active strategy" / "aligns closely with this target's profile"
-- "limiting the conviction level" / "supports a [X] conviction level" / \
-  "achieve a high conviction level" / "challenge that could impact deal success"
-- Internal model scores: "sector affinity score," "deal size match score," \
-  "score of 100," "composite score," "/100," "dimension score"
-- Generic filler: "creates execution uncertainty," "demonstrates their capability," \
-  "poses a risk," "strong alignment"
-- "credible buyer" / "credible acquirer" / "makes them a credible buyer for this target"
-- "fills a [critical/specific/sub-sector] gap" — see SYSTEM_PROMPT; do not recycle in Section 6
-- "positions them [well/as/to]" / "positions this acquirer" — see SYSTEM_PROMPT
-- "indicating a strong fit for this target" or "make them a strong fit"
-- Two sentences with the same grammatical skeleton (both opening with "[Acquirer]'s X" or \
-  both ending with "however, Y limits confidence") — vary the construction between the two
+SENTENCE 1 — Find what is GENUINELY differentiating about THIS buyer's position on this \
+specific shortlist — a fact a different buyer in this report cannot claim equally: \
+    • Sector depth vs. peers: if this buyer has more in-sector deals than most others \
+      (many of whom have only adjacent-sector history), state the exact count \
+    • Size precision: {deals_near_target} deals in the {target_size_band} band is a real \
+      differentiator if it is higher than most peers on the list — name the number \
+    • Platform specificity: a sponsor whose existing platform already covers exactly this \
+      sub-sector at exactly this deal size is different from a generic healthcare PE buyer \
+    • Valuation alignment when peers overpay: AT-MARKET while competitors run significantly \
+      above market is a thesis advantage — name both numbers \
+    • Ownership alignment: high private-company acquisition rate when the target is private
+
+SENTENCE 2 — State the constraint that defines the conviction level: \
+    • HIGH: one bounded friction, framed as manageable — name what it does NOT prevent \
+    • MEDIUM: the specific gap from High — what would need to resolve or change \
+    • LOW: a second independent obstacle that compounds Sentence 1
+
+STRUCTURAL RULES — hard prohibitions, not style suggestions: \
+- Do NOT open Sentence 2 with "However" — this creates the formulaic "[Positive]. \
+  However, [Negative]." construction that makes every page on a 10-page report sound \
+  structurally identical. Open Sentence 2 differently: with the acquirer's name, a \
+  data point, "At [number]x...", "With [N] deals...", "The [specific signal]...", etc. \
+- BANNED: "limits confidence in [this acquisition / their ability to execute]" — \
+  this exact phrase appears across 6+ acquirers per run and adds no analysis; \
+  replace with the specific data point and its implication \
+- BANNED: "raises concerns about" as a sentence opener \
+- BANNED: "The case for fit is strengthened by" — reopens a case already made in S1–S5 \
+- Do not open both sentences with "[Acquirer]'s [X]" — vary grammatical construction \
+- Each sentence must stay under 45 words \
+- Only use numbers from THIS acquirer's data — never borrow a multiple from another \
+- If citing a precedent deal 3× or more larger than the target EV, state the size \
+  ratio and explicitly what it proves vs. does NOT prove
+
+FORBIDDEN in Section 6: \
+- "closest precedent in this shortlist" — circular \
+- "strong willingness to invest" / "willingness to pay a premium" \
+- "reflects their commitment" / "demonstrates their commitment" \
+- "limiting the conviction level" / "supports a [X] conviction level" \
+- Internal model scores ("sector affinity score," "/100," "composite score") \
+- "credible buyer" / "credible acquirer" \
+- "fills a [critical/specific/sub-sector] gap" — belongs in Section 2, not here \
+- "positions them [well/as/to]" / "positions this acquirer" \
+- "indicating a strong fit" / "make them a strong fit" \
+- "creates execution uncertainty" / "demonstrates their capability" / "strong alignment" \
+- "limits confidence in" in any form — replace with the named data point and implication \
+- "raises concerns about" in any form — replace with the specific data point
 """
 
 
