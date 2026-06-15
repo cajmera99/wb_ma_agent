@@ -877,18 +877,10 @@ async def _generate_one(
             result.get("acquirer_overview", "")
         )
 
-    # Post-generation scan for forbidden conviction_rationale phrases.
-    # These are short 2-sentence fields where gpt-4o-mini reliably defaults to 3–4
-    # structural templates regardless of prompt bans. Python substitution is faster
-    # and more consistent than another LLM repair call on a 2-sentence field.
-    #
-    # Patterns caught:
-    # 1. "However" as sentence 2 opener — the most recycled structure (4/10 pages in last run)
-    # 2. "raises concerns about" as sentence 2 opener
-    # 3. "provide[s] a solid/strong foundation" — new dominant sentence 1 template (4/10 pages)
-    # 4. "positions them as [a/an] [X] [candidate/buyer]"
-    # 5. "demonstrates/demonstrating their commitment" — in Section 6 FORBIDDEN list but
-    #    gpt-4o-mini ignores long forbidden lists in short structured fields
+    # Post-generation scan for structural conviction_rationale issues.
+    # Kept minimal — mid-sentence substitutions cause grammar errors and conflict
+    # with the data-driven prompt approach. Only strip "However," as a sentence
+    # opener since that single-word removal is grammatically safe.
     _conviction_text = result.get("conviction_rationale", "")
     _conviction_changed = False
 
@@ -901,52 +893,6 @@ async def _generate_one(
         flags=re.IGNORECASE,
     )
     if _n1:
-        _conviction_changed = True
-
-    # Pattern 2: "raises concerns about" → "the specific concern is"
-    _conviction_text, _n2 = re.subn(
-        r'\braises\s+concerns\s+about\b',
-        'the specific concern is',
-        _conviction_text,
-        flags=re.IGNORECASE,
-    )
-    if _n2:
-        _conviction_changed = True
-
-    # Pattern 3: "[X] provide[s] a solid/strong foundation for this acquisition"
-    # Replace the whole clause with a data-anchored size-precision claim.
-    _foundation_re = re.compile(
-        r"[\w\s']+provide[s]?\s+a\s+(?:solid|strong)\s+foundation\s+for\s+this\s+acquisition",
-        re.IGNORECASE,
-    )
-    if _foundation_re.search(_conviction_text):
-        _size_claim = (
-            f"{acquirer_name}'s {deals_near_target} deals in the {target_size_band} "
-            f"size band and {primary_sector_deal_count} in {target.sector} "
-            f"make them the {'most' if primary_sector_deal_count > 1 else 'a relevant'} "
-            f"sector-calibrated buyer on this shortlist"
-        )
-        _conviction_text = _foundation_re.sub(_size_claim, _conviction_text)
-        _conviction_changed = True
-
-    # Pattern 4: "positions them as a [X] candidate/buyer"
-    _conviction_text, _n4 = re.subn(
-        r'\bpositions\s+them\s+as\s+(?:a|an)\s+\w+\s+(?:candidate|buyer)\b',
-        f'ranks {acquirer_name} as a shortlist candidate on deal size and sector fit',
-        _conviction_text,
-        flags=re.IGNORECASE,
-    )
-    if _n4:
-        _conviction_changed = True
-
-    # Pattern 5: "demonstrates/demonstrating their commitment"
-    _conviction_text, _n5 = re.subn(
-        r'\bdemonstrat(?:es|ing)\s+their\s+commitment\s+to\b',
-        'with',
-        _conviction_text,
-        flags=re.IGNORECASE,
-    )
-    if _n5:
         _conviction_changed = True
 
     if _conviction_changed:

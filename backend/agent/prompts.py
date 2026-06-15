@@ -527,45 +527,9 @@ LOW — The MD is skeptical. Sentence 1 names the PRIMARY obstacle: the specific
 SECOND independent obstacle that compounds the first. No positive framing in either \
 sentence. The reader finishes understanding this buyer is a reach, not a fit.
 
-SENTENCE 1 — Answer this question using the SHORTLIST PEER CONTEXT injected above: \
-"Among the {acquirer_type} buyers in this shortlist, what makes {acquirer_name} the \
-more or less compelling fit for this specific ${deal_size_mm}MM target?" \
-\
-The peer context tells you where this buyer ranks vs. their type-peers on sector deal \
-count, comparable-size deals, and valuation posture. Use those comparative rankings to \
-write a sentence that is true for THIS buyer and cannot be copy-pasted onto a peer's page. \
-\
-HIGH example: "With {primary_sector_deal_count} sector deals and {deals_near_target} in \
-the {target_size_band} range, [Acquirer] is the most calibrated {acquirer_type} buyer in \
-this process, and their {median_ev_ebitda}x historical median lands within 1 turn of \
-market — a posture their peers on this shortlist do not all share." \
-\
-MEDIUM example: "[Acquirer]'s {primary_sector_deal_count} sector deals rank [N]th among \
-{acquirer_type} buyers here; the thesis holds on thesis alignment but their {median_ev_ebitda}x \
-valuation posture requires [stretch_pct]% above their own historical comfort — a stretch \
-no comparable precedent has cleared." \
-\
-LOW example: "[Acquirer] ranks among the lower-calibrated {acquirer_type} buyers in sector \
-exposure ({primary_sector_deal_count} in-sector deals) and {deals_near_target} comparable-size \
-precedents, suggesting a deal profile that skews materially larger or smaller than this target."
+SENTENCE 1 — Start from this acquirer’s data, not from a template. \nLook at the SHORTLIST PEER CONTEXT above and find the fact that is MOST DISTINCTIVE \nabout {acquirer_name} compared to the other {acquirer_type} buyers in this shortlist. \nDifferent acquirers will have different distinctive facts — choose the entry point \nthat fits THIS buyer’s actual profile: \n\n  • VALUATION POSTURE: if this buyer’s {median_ev_ebitda}x sits significantly above \n    or below the other {acquirer_type} buyers, lead with that multiple and what it \n    implies for this deal’s pricing dynamics — not a generic "above/below market" \n    label but the specific consequence: does it mean they can win without stretching? \n    Does it mean they’ve never proven they can close at market rates? \n  • NAMED PRECEDENT: if one of this buyer’s prior deals is directly comparable \n    (same sector, similar size, recent close), lead with that deal — "[Acquirer]’s \n    [year] acquisition of [name] at $[size]M is the only in-sector precedent at this \n    deal size among {acquirer_type} buyers here." \n  • SECTOR DEPTH OR ABSENCE: if in-sector experience is the defining signal, state \n    what it MEANS for this deal — not just the count, but the implication for \n    pricing, diligence, or integration capability. Zero in-sector deals means something \n    different for a buyer with adjacent precedents vs. one with no healthcare history. \n  • DEAL SIZE FIT OR MISMATCH: if this buyer’s precedent deal range sits far above \n    or below the $200MM target, lead with the gap — "Every prior close sits [above/below] \n    this target’s size; the structural question is whether they reorient to a smaller/ \n    larger deal profile at this price point." \n  • COMPLETION TRACK RECORD: if withdrawn or terminated deals define this buyer’s \n    process risk, or if their recent cadence sets them apart from inactive peers, \n    that is the opening fact. \n\nSelf-test: read the sentence and ask — could this appear on a different acquirer’s page \nwith only a name swap? If yes, the sentence is a template; find a more specific fact.
 
-SENTENCE 2 — Answer this question: "Why is this {conviction_baseline} rather than one level \
-higher — what is the precise data observation that defines the gap?" \
-\
-HIGH: name the one friction but show why it does NOT block the deal. "At {median_ev_ebitda}x \
-they pay above market, but [N] closed deals at that pricing confirm execution, not just \
-ambition." Sentence 2 for High must leave the reader confident, not hedged — if it sounds \
-like a caveat that erases Sentence 1, rewrite it. \
-\
-MEDIUM: name the exact gap between this buyer and High — the specific condition that would \
-need to resolve. "With [N] sector deals and a required [X]% valuation stretch \
-above their own historical comfort, conviction rises if they demonstrate price discipline \
-in a competitive process." The reader should understand what would UNLOCK the higher level, \
-not just what holds it back. \
-\
-LOW: name a second independent obstacle that compounds Sentence 1. Both sentences should \
-make the reader feel this is a structural stretch — no positive framing in either sentence.
-
+SENTENCE 2 — Name the PRECISE data point that determines why this is {conviction_baseline} \nand not one level higher. A category of risk ("valuation," "competition") is not enough — \nname the specific number or observable fact. \n\nHIGH — The friction is real but BOUNDED. State what it does NOT prevent, ending the sentence \non the affirmative: "their [specific friction], but [N] closed deals at that level confirm \n[specific capability]." Do not end Sentence 2 with a doubt or caveat — the reader should \nleave feeling the recommendation is clear, not hedged. The friction may be: valuation posture, \na deal size gap, sector adjacency, or completion track record — use whichever the data shows. \n\nMEDIUM — Name the GAP-CLOSING CONDITION: the specific thing that would need to be true for \nthis to become High. The condition may be: demonstrated price discipline at comparable multiples \nthey have not yet cleared, a closed deal at this size, first-sector entry beyond adjacent \nexposure, or a clean completion track record. Conviction rises if [specific observable condition] — \nnot "discipline in a competitive process" (which applies to all 10 acquirers equally) but the \nspecific gap that is unique to THIS buyer. \n\nLOW — Name a SECOND INDEPENDENT obstacle that compounds Sentence 1. Both sentences should make \nthe reader feel this is a structural mismatch. No positive framing in either sentence.
 STRUCTURAL CONSTRAINTS: \
 - Each sentence must stay under 45 words \
 - Only use numbers from THIS acquirer's data — never borrow a multiple from another acquirer \
