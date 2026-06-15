@@ -167,7 +167,7 @@ def _build_cover_page(target: TargetProfile, styles: dict, flowables: list) -> N
 
     target_data = [
         ["Sector", target.sector],
-        ["Enterprise Value", f"~${target.deal_size_mm:,.0f}M"],
+        ["Enterprise Value", f"~${target.deal_size_mm:,.0f}MM"],
         ["Geography", target.geography],
         ["Ownership", target.ownership],
         ["Profile", target.profile_description or "—"],
@@ -382,7 +382,7 @@ def _build_acquirer_page(rationale: dict, styles: dict, flowables: list) -> None
 
     deals = rationale.get("precedent_deals", [])[:5]
     if deals:
-        deal_rows = [["Transaction", "Size ($M)", "Type", "EV/EBITDA", "Outcome"]]
+        deal_rows = [["Transaction", "Size ($MM)", "Type", "EV/EBITDA", "Outcome"]]
         for d in deals:
             ev_ebitda = f"{d.get('ev_ebitda_multiple', 'N/A')}x" if d.get("ev_ebitda_multiple") else "N/A"
             deal_rows.append([

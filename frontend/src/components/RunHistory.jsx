@@ -97,7 +97,7 @@ export default function RunHistory({ onSelectRun, activeRunId, refreshKey, onNew
               <span style={S.status(r.status)}>{r.status?.toUpperCase()}</span>
             </div>
             <div style={S.ev}>
-              ${target.deal_size_mm}M &middot; {target.geography} &middot; {target.ownership}
+              ${target.deal_size_mm}MM &middot; {target.geography} &middot; {target.ownership}
             </div>
             <div style={S.time}>{ts}</div>
           </div>

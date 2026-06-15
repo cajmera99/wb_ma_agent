@@ -101,7 +101,7 @@ export default function AcquirerCard({ rationale }) {
               <table style={S.dealTable}>
                 <thead>
                   <tr>
-                    {['Target', 'Year', 'Size ($M)', 'Type', 'EV/EBITDA', 'Outcome'].map((h) => (
+                    {['Target', 'Year', 'Size ($MM)', 'Type', 'EV/EBITDA', 'Outcome'].map((h) => (
                       <th key={h} style={S.th}>{h}</th>
                     ))}
                   </tr>

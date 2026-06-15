@@ -111,7 +111,7 @@ export default function TargetForm({ onRunStarted, loading, formLocked, historic
             <input style={S.input(fieldDisabled)} value={form.sector} onChange={set('sector')} disabled={fieldDisabled} required />
           </div>
           <div>
-            <label style={S.label}>Enterprise Value ($M)</label>
+            <label style={S.label}>Enterprise Value ($MM)</label>
             <input style={S.input(fieldDisabled)} type="number" value={form.deal_size_mm} onChange={set('deal_size_mm')} disabled={fieldDisabled} required />
           </div>
           <div>
