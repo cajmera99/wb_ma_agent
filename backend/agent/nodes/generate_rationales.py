@@ -687,10 +687,10 @@ async def _generate_one(
     # Scan runs on the current result (after any EBITDA repair) so it catches
     # phrases introduced by the EBITDA repair as well as first-pass output.
     _filler_re = re.compile(
-        r"positions\s+(?:\w+\s+){1,3}uniquely\b"
-        r"|fills?\s+a\s+(?:critical|specific|key|unique|strategic)\b"
-        r"|fills?\s+a\s+gap\b"
-        r"|adds?\s+a\s+critical\b",
+        # Only catch the most egregious and persistent filler — "positions [name/them]
+        # uniquely [to/as/...]". "fills a gap" variants are addressed by the prompt;
+        # enforcing them post-gen triggers too many repairs on thin-sector acquirers.
+        r"positions\s+(?:\w+\s+){1,3}uniquely\b",
         re.IGNORECASE,
     )
     _filler_scan = " ".join(filter(None, [

@@ -369,6 +369,15 @@ bolt-on count can appear in sentence 2 if sentence 1 uses a different differenti
 The first 220 characters of Section 2 will be reviewed for citation density — ensure \
 at least 2 specific numbers appear in that opening window.
 
+STRATEGIC ACQUIRER — FIRST SENTENCE RULE (mandatory if acquirer_type = Strategic):
+Your Section 2 FIRST SENTENCE must be grounded in a specific data point — not a \
+connector phrase. HARD PROHIBITION: do NOT open with any form of "positions [name/them] \
+uniquely to [leverage/capitalize/...]" — this is the single most-detected filler opener \
+and generates an automatic rejection. Lead instead with the deal count in this sector: \
+"{acquirer_name}'s [N] deals in Healthcare Services demonstrate..." or a named precedent \
+deal: "{acquirer_name}'s [year] acquisition of [deal name] illustrates their focus on..." \
+The first 220 characters of Section 2 must contain at least 2 specific numbers.
+
 SECTION 3 — PRECEDENT ACTIVITY
 List all deals from the precedent data provided (up to 5 shown, \
 sector-relevant first). For each deal state: target company, sector, \
