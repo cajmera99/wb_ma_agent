@@ -117,7 +117,7 @@ export default function App() {
       <div style={S.layout}>
         {/* Sidebar — run history */}
         <aside>
-          <RunHistory onSelectRun={handleSelectHistoricalRun} activeRunId={runId} refreshKey={refreshKey} />
+          <RunHistory onSelectRun={handleSelectHistoricalRun} activeRunId={runId} refreshKey={refreshKey} onNewAnalysis={handleNewAnalysis} />
         </aside>
 
         {/* Main content */}

@@ -15,7 +15,7 @@ const S = {
     maxHeight: '85vh',
     overflowY: 'auto',
   },
-  title: { fontSize: 14, fontWeight: 700, color: '#003087', marginBottom: 12 },
+  title: { fontSize: 14, fontWeight: 700, color: '#003087', marginBottom: 0 },
   row: (status) => ({
     padding: '10px 0',
     borderBottom: '1px solid #f0f4f8',
@@ -30,7 +30,7 @@ const S = {
   empty: { fontSize: 12, color: '#a0aec0', textAlign: 'center', padding: '20px 0' },
 }
 
-export default function RunHistory({ onSelectRun, activeRunId, refreshKey }) {
+export default function RunHistory({ onSelectRun, activeRunId, refreshKey, onNewAnalysis }) {
   const [runs, setRuns] = useState([])
 
   const load = async () => {
@@ -61,7 +61,19 @@ export default function RunHistory({ onSelectRun, activeRunId, refreshKey }) {
 
   return (
     <div style={S.panel}>
-      <div style={S.title}>Run History</div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <div style={S.title}>Run History</div>
+        <button
+          onClick={onNewAnalysis}
+          style={{
+            padding: '5px 10px', background: '#003087', color: '#fff',
+            border: 'none', borderRadius: 5, fontSize: 11, fontWeight: 600,
+            cursor: 'pointer', whiteSpace: 'nowrap',
+          }}
+        >
+          + New
+        </button>
+      </div>
       {runs.length === 0 && (
         <div style={S.empty}>No runs yet</div>
       )}
