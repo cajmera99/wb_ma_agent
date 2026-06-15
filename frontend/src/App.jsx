@@ -54,12 +54,26 @@ export default function App() {
   // historicalTarget changed (it stays null between runs, so its useEffect won't fire).
   const [formResetKey, setFormResetKey] = useState(0)
 
-  // On mount: restore the most recent completed run from the backend so a
-  // browser refresh doesn't wipe the main content (the server still has it).
+  // On mount: reconnect to a running run (page refresh mid-run), or restore
+  // the latest completed run so results survive a refresh.
   useEffect(() => {
     fetch('/api/runs')
       .then((r) => (r.ok ? r.json() : []))
       .then((runs) => {
+        if (!runs.length) return
+
+        // Priority 1: reconnect to a run that is still in progress
+        const running = runs.find((r) => r.status === 'running')
+        if (running) {
+          setRunId(running.run_id)
+          setLoading(true)
+          setFormLocked(true)
+          setStreamUrl(`/api/runs/${running.run_id}/stream`)
+          setRefreshKey((k) => k + 1)
+          return
+        }
+
+        // Priority 2: restore the most recent completed run
         const latest = runs.find((r) => r.status === 'completed')
         if (!latest) return
         fetch(`/api/runs/${latest.run_id}/result`)
