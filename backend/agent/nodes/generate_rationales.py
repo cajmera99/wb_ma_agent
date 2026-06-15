@@ -514,6 +514,16 @@ async def _generate_one(
         # multiplier (paying 4.5 TIMES the market price), not an additive turn difference.
         turns_diff = round(acquirer_median_ebitda - market_median_ebitda, 1)
         if gap_pct > 15:
+            _s6_note = ""
+            if conviction_baseline in ("Medium", "Low"):
+                _s6_note = (
+                    f" SECTION 6: The above-market multiple is a RISK, not a competitive advantage. "
+                    f"FORBIDDEN in Section 6 Sentence 1: 'indicates a willingness to pay above market, "
+                    f"which could enhance their competitive position' — this inverts the risk. "
+                    f"For {conviction_baseline} conviction frame the {acq_str} median as pricing tension: "
+                    f"they may win the auction but at the cost of IRR compression against the "
+                    f"{mkt_str} market — that spread IS the gap-closing condition for Sentence 2."
+                )
             anomaly_parts.append(
                 f"⚠ ABOVE-MARKET PAYER: Historical median EV/EBITDA {acq_str} is "
                 f"{gap_pct:.0f}% above market ({mkt_str}). In Section 5, name the risk "
@@ -521,6 +531,7 @@ async def _generate_one(
                 f"{mkt_str} market median (+{turns_diff} turns, +{gap_pct:.0f}% above market); "
                 f"exit multiple compression amplifies IRR risk.' "
                 f"Use {acq_str}, {mkt_str}, and +{turns_diff} turns — do not substitute any other numbers."
+                + _s6_note
             )
         elif gap_pct < -10:
             # stretch_pct: "must bid X% above historical comfort" means the base is the
@@ -800,15 +811,15 @@ async def _generate_one(
     # Scan runs on the current result (after any EBITDA repair) so it catches
     # phrases introduced by the EBITDA repair as well as first-pass output.
     _filler_re = re.compile(
-        # Catches three categories of persistent filler in strategic_fit_thesis:
+        # Catches four categories of persistent filler:
         # 1. "positions [name/them] uniquely [to/as/...]" — classic opener
         # 2. "fill(s/ing) [0-4 words] gap" — all "fills a [X] gap" variants
-        # 3. "illustrate[s] their focus on [expanding/this sector]" — new dominant
-        #    opener appearing on 6/10 pages; only applied to strategic_fit_thesis
-        #    since "illustrates" can appear legitimately elsewhere.
+        # 3. "illustrate[s] their focus on [expanding/this sector]"
+        # 4. "provide[s] a solid/strong/firm/good foundation" — conviction boilerplate
         r"positions\s+(?:\w+\s+){1,3}uniquely\b"
         r"|fill(?:s|ing)?\s+(?:[\w-]+\s+){0,4}gap\b"
-        r"|illustrates?\s+their\s+(?:focus|commitment|strategy)\s+on\b",
+        r"|illustrates?\s+their\s+(?:focus|commitment|strategy)\s+on\b"
+        r"|provides?\s+a\s+(?:solid|strong|firm|good)\s+foundation\b",
         re.IGNORECASE,
     )
     _filler_scan = " ".join(filter(None, [
@@ -878,13 +889,10 @@ async def _generate_one(
         )
 
     # Post-generation scan for structural conviction_rationale issues.
-    # Kept minimal — mid-sentence substitutions cause grammar errors and conflict
-    # with the data-driven prompt approach. Only strip "However," as a sentence
-    # opener since that single-word removal is grammatically safe.
     _conviction_text = result.get("conviction_rationale", "")
     _conviction_changed = False
 
-    # Pattern 1: "However, [anything]" starting any sentence — replace the opener only.
+    # Pattern 1: Strip "However," as a sentence opener.
     # The content after "However, " is usually valid; the word itself is the template cue.
     _conviction_text, _n1 = re.subn(
         r'\bHowever,\s+',
@@ -895,12 +903,57 @@ async def _generate_one(
     if _n1:
         _conviction_changed = True
 
+    # Capitalize the first letter after sentence-ending punctuation.
+    # Pattern 1 leaves lowercase residuals ("...sentence. their...") when "However, "
+    # preceded a lowercase continuation word — capitalize catches all such cases.
+    _conviction_capped = re.sub(
+        r'(?<=[.!?]\s)([a-z])',
+        lambda m: m.group(1).upper(),
+        _conviction_text,
+    )
+    if _conviction_capped != _conviction_text:
+        _conviction_text = _conviction_capped
+        _conviction_changed = True
+
+    # Capitalize the very first character if it is lowercase
+    if _conviction_text and _conviction_text[0].islower():
+        _conviction_text = _conviction_text[0].upper() + _conviction_text[1:]
+        _conviction_changed = True
+
     if _conviction_changed:
         logger.warning(
             "conviction_boilerplate_detected_applying_python_fix",
             acquirer=acquirer_name,
         )
         result["conviction_rationale"] = _conviction_text.strip()
+
+    # Fix singular/plural: "1 deals" → "1 deal" across key text fields.
+    # The Section 1 example uses "{total_deals} deals" which the LLM copies literally,
+    # producing "1 deals" when total_deals == 1.
+    for _field in ("acquirer_overview", "strategic_fit_thesis", "conviction_rationale"):
+        _val = result.get(_field, "")
+        if _val:
+            _fixed = re.sub(r'\b1 deals\b', '1 deal', _val, flags=re.IGNORECASE)
+            if _fixed != _val:
+                result[_field] = _fixed
+
+    # Remove duplicate sentences from strategic_fit_thesis.
+    # The filler replacement can produce a duplicate when the LLM also generated the same
+    # non-filler version in an adjacent sentence (Welsh Carson observed in run #12).
+    _thesis = result.get("strategic_fit_thesis", "")
+    if _thesis:
+        _thesis_parts = re.split(r'(?<=[.!?])\s+', _thesis.strip())
+        _seen_s: set[str] = set()
+        _deduped_list: list[str] = []
+        for _s in _thesis_parts:
+            _snorm = _s.strip()
+            if _snorm and _snorm not in _seen_s:
+                _deduped_list.append(_snorm)
+                _seen_s.add(_snorm)
+        _thesis_deduped = ' '.join(_deduped_list)
+        if _thesis_deduped != _thesis:
+            logger.warning("duplicate_sentence_removed_from_thesis", acquirer=acquirer_name)
+            result["strategic_fit_thesis"] = _thesis_deduped
 
     return result
 
