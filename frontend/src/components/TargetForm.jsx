@@ -55,27 +55,30 @@ const DEFAULTS = {
   profile_description: 'Mid-market, private, regional, strong EBITDA margins',
 }
 
-export default function TargetForm({ onRunStarted, loading, formLocked, historicalTarget }) {
+export default function TargetForm({ onRunStarted, loading, formLocked, historicalTarget, resetKey }) {
   const [form, setForm] = useState(DEFAULTS)
   // editMode: false = locked (viewing history), true = editable (new or editing)
   const [editMode, setEditMode] = useState(true)
 
-  // When a historical run is selected from the sidebar, populate + lock the form
+  // When a historical run is selected, populate + lock the form
   useEffect(() => {
-    if (historicalTarget) {
-      setForm({
-        sector: historicalTarget.sector || DEFAULTS.sector,
-        deal_size_mm: historicalTarget.deal_size_mm || DEFAULTS.deal_size_mm,
-        geography: historicalTarget.geography || DEFAULTS.geography,
-        ownership: historicalTarget.ownership || DEFAULTS.ownership,
-        profile_description: historicalTarget.profile_description || DEFAULTS.profile_description,
-      })
-      setEditMode(false)
-    } else {
-      // historicalTarget cleared by sidebar "+ New" — always unlock
-      setEditMode(true)
-    }
+    if (!historicalTarget) return
+    setForm({
+      sector: historicalTarget.sector || DEFAULTS.sector,
+      deal_size_mm: historicalTarget.deal_size_mm || DEFAULTS.deal_size_mm,
+      geography: historicalTarget.geography || DEFAULTS.geography,
+      ownership: historicalTarget.ownership || DEFAULTS.ownership,
+      profile_description: historicalTarget.profile_description || DEFAULTS.profile_description,
+    })
+    setEditMode(false)
   }, [historicalTarget])
+
+  // "+ New" increments resetKey. This always fires — even when historicalTarget was
+  // already null between runs — guaranteeing a clean DEFAULTS form each time.
+  useEffect(() => {
+    setForm(DEFAULTS)
+    setEditMode(true)
+  }, [resetKey])
 
   // Fields + submit are disabled while a run is in progress OR after it completes.
   // Only the sidebar "+ New" button resets formLocked and re-enables the form.

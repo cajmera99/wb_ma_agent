@@ -50,6 +50,9 @@ export default function App() {
   // formLocked: true from the moment Submit is clicked until "+ New" is clicked.
   // Prevents re-submission on a completed run without clearing state first.
   const [formLocked, setFormLocked] = useState(false)
+  // Incrementing this tells TargetForm to reset to DEFAULTS regardless of whether
+  // historicalTarget changed (it stays null between runs, so its useEffect won't fire).
+  const [formResetKey, setFormResetKey] = useState(0)
 
   // On mount: restore the most recent completed run from the backend so a
   // browser refresh doesn't wipe the main content (the server still has it).
@@ -103,6 +106,7 @@ export default function App() {
     setResult(null)
     setRunId(null)
     setStreamUrl(null)
+    setFormResetKey((k) => k + 1)
   }
 
   const rationales = result?.rationales
@@ -132,6 +136,7 @@ export default function App() {
             loading={loading}
             formLocked={formLocked}
             historicalTarget={historicalTarget}
+            resetKey={formResetKey}
           />
 
           {/* API endpoint links — always visible */}
