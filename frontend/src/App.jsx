@@ -132,7 +132,6 @@ export default function App() {
             loading={loading}
             formLocked={formLocked}
             historicalTarget={historicalTarget}
-            onNewAnalysis={handleNewAnalysis}
           />
 
           {/* API endpoint links — always visible */}

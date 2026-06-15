@@ -45,11 +45,6 @@ const S = {
     color: '#fff', border: 'none', borderRadius: 5, fontSize: 14,
     fontWeight: 600, cursor: disabled ? 'not-allowed' : 'pointer',
   }),
-  btnOutline: {
-    padding: '10px 20px', background: 'transparent',
-    color: '#003087', border: '1.5px solid #003087', borderRadius: 5,
-    fontSize: 14, fontWeight: 600, cursor: 'pointer',
-  },
 }
 
 const DEFAULTS = {
@@ -60,7 +55,7 @@ const DEFAULTS = {
   profile_description: 'Mid-market, private, regional, strong EBITDA margins',
 }
 
-export default function TargetForm({ onRunStarted, loading, formLocked, historicalTarget, onNewAnalysis }) {
+export default function TargetForm({ onRunStarted, loading, formLocked, historicalTarget }) {
   const [form, setForm] = useState(DEFAULTS)
   // editMode: false = locked (viewing history), true = editable (new or editing)
   const [editMode, setEditMode] = useState(true)
@@ -77,25 +72,19 @@ export default function TargetForm({ onRunStarted, loading, formLocked, historic
       })
       setEditMode(false)
     } else {
-      // historicalTarget cleared (from sidebar or form button) — always unlock
+      // historicalTarget cleared by sidebar "+ New" — always unlock
       setEditMode(true)
     }
   }, [historicalTarget])
 
-  const handleNewAnalysis = () => {
-    // Unlock the form with the historical values pre-filled — user edits and submits manually
-    setEditMode(true)
-    onNewAnalysis()
-  }
-
   // Fields + submit are disabled while a run is in progress OR after it completes.
-  // Only "+ New" resets formLocked and re-enables the form.
+  // Only the sidebar "+ New" button resets formLocked and re-enables the form.
   const fieldDisabled = formLocked || !editMode || loading
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    if (!editMode) return   // safety guard: locked form should never submit
+    if (formLocked || !editMode || loading) return  // guard against double-submit race
     const body = { ...form, deal_size_mm: parseFloat(form.deal_size_mm) }
     const res = await fetch('/api/analyze', {
       method: 'POST',
@@ -153,20 +142,9 @@ export default function TargetForm({ onRunStarted, loading, formLocked, historic
         </div>
 
         <div style={S.btnRow}>
-          {isViewing && (
-            // type="button" is critical here — prevents any accidental form submission
-            <button type="button" style={S.btnOutline} onClick={handleNewAnalysis}>
-              + New Analysis
-            </button>
-          )}
-          {/* Submit button is always in the DOM — never swapped out — to avoid
-              the browser firing a click on it when it appears in place of another button */}
           <button
             type="submit"
-            style={{
-              ...S.btnSubmit(fieldDisabled),
-              display: isViewing ? 'none' : 'inline-block',
-            }}
+            style={S.btnSubmit(fieldDisabled)}
             disabled={fieldDisabled}
           >
             {loading ? 'Running Analysis…' : 'Identify Acquirers'}
