@@ -1,4 +1,8 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
+
+// Module-level lock — survives React StrictMode unmount/remount and re-renders.
+// useRef resets to false on remount; this does not.
+let _submitInFlight = false
 
 const S = {
   card: {
@@ -73,9 +77,10 @@ export default function TargetForm({ onRunStarted, loading, formLocked, historic
     setEditMode(false)
   }, [historicalTarget])
 
-  // "+ New" increments resetKey. This always fires — even when historicalTarget was
-  // already null between runs — guaranteeing a clean DEFAULTS form each time.
+  // "+ New" increments resetKey. Resets form and clears the module-level submit lock
+  // so a stuck lock can never permanently block future submissions.
   useEffect(() => {
+    _submitInFlight = false
     setForm(DEFAULTS)
     setEditMode(true)
   }, [resetKey])
@@ -85,15 +90,10 @@ export default function TargetForm({ onRunStarted, loading, formLocked, historic
   const fieldDisabled = formLocked || !editMode || loading
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
 
-  // Ref-based in-flight guard: flips synchronously before the first await so a
-  // second submit (e.g. Enter key in field + button click) is blocked immediately,
-  // without waiting for React to re-render formLocked from the parent.
-  const submittingRef = useRef(false)
-
   const handleSubmit = async (e) => {
     e.preventDefault()
-    if (formLocked || !editMode || loading || submittingRef.current) return
-    submittingRef.current = true
+    if (formLocked || !editMode || loading || _submitInFlight) return
+    _submitInFlight = true
     try {
       const body = { ...form, deal_size_mm: parseFloat(form.deal_size_mm) }
       const res = await fetch('/api/analyze', {
@@ -104,7 +104,7 @@ export default function TargetForm({ onRunStarted, loading, formLocked, historic
       const data = await res.json()
       onRunStarted(data.run_id, data.stream_url)
     } finally {
-      submittingRef.current = false
+      _submitInFlight = false
     }
   }
 
