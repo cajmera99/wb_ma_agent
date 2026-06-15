@@ -73,6 +73,21 @@ Explicitly forbidden phrases — these will be flagged as failures if they appea
   needs it more than the others on the shortlist
 - "strong alignment with their [operational/strategic] goals" — replace with the \
   named goal and the named evidence from the data
+- Section 2 opener: opening with "[N] deals illustrate their focus on [expanding/this \
+  sector]" uses a deal count to reach a generic conclusion. The opening sentence must \
+  reach a SPECIFIC CONCLUSION from the data — not restate that deals exist. Use instead: \
+  a named precedent deal that proves a specific capability ("their 2021 acquisition of X \
+  at $YM demonstrates they operate at this deal size"), a sub-sector pattern from \
+  sub_sector_counts ("4 of 8 deals concentrate in [sub-sector] while [adjacent] is absent \
+  — this target adds that missing line"), a platform cadence rate ("since their 2021 \
+  platform, [N] bolt-ons — [rate] per year"), or a peer comparison from the SHORTLIST PEER \
+  CONTEXT injected in the prompt. Self-test: if this first sentence could appear unchanged \
+  on a different acquirer's page, it is not specific enough.
+- Section 6 Sentence 1: a deal count alone does not differentiate this buyer — multiple \
+  buyers on the shortlist may share similar counts. Use the SHORTLIST PEER CONTEXT to find \
+  where THIS buyer ranks among their type peers on sector deal count, size calibration, \
+  or valuation posture. Lead with the ranking observation specific to this buyer's position \
+  in THIS process — not a generic summary of their history.
 
 Distinguishing Strategic from Financial Sponsor theses:
 - Strategic buyers: thesis must name the specific capability gap, market adjacency, \
@@ -244,7 +259,7 @@ acquirer profile means they paid that multiple times the acquired company's EBIT
 price — never a margin. Never describe a precedent deal's multiple as an "EBITDA margin \
 percentage." A 16.6x multiple does not mean 16.6% margins.
 
-{co_acquirer_context}{anomaly_flags}
+{co_acquirer_context}{anomaly_flags}{peer_context}
 YOUR TASK
 ---------
 Write all six sections below using ONLY the data provided above.
@@ -512,52 +527,54 @@ LOW — The MD is skeptical. Sentence 1 names the PRIMARY obstacle: the specific
 SECOND independent obstacle that compounds the first. No positive framing in either \
 sentence. The reader finishes understanding this buyer is a reach, not a fit.
 
-SENTENCE 1 — Find what is GENUINELY differentiating about THIS buyer's position on this \
-specific shortlist — a fact a different buyer in this report cannot claim equally: \
-    • Sector depth vs. peers: if this buyer has more in-sector deals than most others \
-      (many of whom have only adjacent-sector history), state the exact count \
-    • Size precision: {deals_near_target} deals in the {target_size_band} band is a real \
-      differentiator if it is higher than most peers on the list — name the number \
-    • Platform specificity: a sponsor whose existing platform already covers exactly this \
-      sub-sector at exactly this deal size is different from a generic healthcare PE buyer \
-    • Valuation alignment when peers overpay: AT-MARKET while competitors run significantly \
-      above market is a thesis advantage — name both numbers \
-    • Ownership alignment: high private-company acquisition rate when the target is private
+SENTENCE 1 — Answer this question using the SHORTLIST PEER CONTEXT injected above: \
+"Among the {acquirer_type} buyers in this shortlist, what makes {acquirer_name} the \
+more or less compelling fit for this specific ${deal_size_mm}MM target?" \
+\
+The peer context tells you where this buyer ranks vs. their type-peers on sector deal \
+count, comparable-size deals, and valuation posture. Use those comparative rankings to \
+write a sentence that is true for THIS buyer and cannot be copy-pasted onto a peer's page. \
+\
+HIGH example: "With {primary_sector_deal_count} sector deals and {deals_near_target} in \
+the {target_size_band} range, [Acquirer] is the most calibrated {acquirer_type} buyer in \
+this process, and their {median_ev_ebitda}x historical median lands within 1 turn of \
+market — a posture their peers on this shortlist do not all share." \
+\
+MEDIUM example: "[Acquirer]'s {primary_sector_deal_count} sector deals rank [N]th among \
+{acquirer_type} buyers here; the thesis holds on thesis alignment but their {median_ev_ebitda}x \
+valuation posture requires [stretch_pct]% above their own historical comfort — a stretch \
+no comparable precedent has cleared." \
+\
+LOW example: "[Acquirer] ranks among the lower-calibrated {acquirer_type} buyers in sector \
+exposure ({primary_sector_deal_count} in-sector deals) and {deals_near_target} comparable-size \
+precedents, suggesting a deal profile that skews materially larger or smaller than this target."
 
-SENTENCE 2 — State the constraint that defines the conviction level: \
-    • HIGH: one bounded friction, framed as manageable — name what it does NOT prevent \
-    • MEDIUM: the specific gap from High — what would need to resolve or change \
-    • LOW: a second independent obstacle that compounds Sentence 1
+SENTENCE 2 — Answer this question: "Why is this {conviction_baseline} rather than one level \
+higher — what is the precise data observation that defines the gap?" \
+\
+HIGH: name the one friction but show why it does NOT block the deal. "At {median_ev_ebitda}x \
+they pay above market, but [N] closed deals at that pricing confirm execution, not just \
+ambition." Sentence 2 for High must leave the reader confident, not hedged — if it sounds \
+like a caveat that erases Sentence 1, rewrite it. \
+\
+MEDIUM: name the exact gap between this buyer and High — the specific condition that would \
+need to resolve. "With [N] sector deals and a required [X]% valuation stretch \
+above their own historical comfort, conviction rises if they demonstrate price discipline \
+in a competitive process." The reader should understand what would UNLOCK the higher level, \
+not just what holds it back. \
+\
+LOW: name a second independent obstacle that compounds Sentence 1. Both sentences should \
+make the reader feel this is a structural stretch — no positive framing in either sentence.
 
-STRUCTURAL RULES — hard prohibitions, not style suggestions: \
-- Do NOT open Sentence 2 with "However" — this creates the formulaic "[Positive]. \
-  However, [Negative]." construction that makes every page on a 10-page report sound \
-  structurally identical. Open Sentence 2 differently: with the acquirer's name, a \
-  data point, "At [number]x...", "With [N] deals...", "The [specific signal]...", etc. \
-- BANNED: "limits confidence in [this acquisition / their ability to execute]" — \
-  this exact phrase appears across 6+ acquirers per run and adds no analysis; \
-  replace with the specific data point and its implication \
-- BANNED: "raises concerns about" as a sentence opener \
-- BANNED: "The case for fit is strengthened by" — reopens a case already made in S1–S5 \
-- Do not open both sentences with "[Acquirer]'s [X]" — vary grammatical construction \
+STRUCTURAL CONSTRAINTS: \
 - Each sentence must stay under 45 words \
-- Only use numbers from THIS acquirer's data — never borrow a multiple from another \
-- If citing a precedent deal 3× or more larger than the target EV, state the size \
-  ratio and explicitly what it proves vs. does NOT prove
-
-FORBIDDEN in Section 6: \
-- "closest precedent in this shortlist" — circular \
-- "strong willingness to invest" / "willingness to pay a premium" \
-- "reflects their commitment" / "demonstrates their commitment" \
-- "limiting the conviction level" / "supports a [X] conviction level" \
-- Internal model scores ("sector affinity score," "/100," "composite score") \
-- "credible buyer" / "credible acquirer" \
-- "fills a [critical/specific/sub-sector] gap" — belongs in Section 2, not here \
-- "positions them [well/as/to]" / "positions this acquirer" \
-- "indicating a strong fit" / "make them a strong fit" \
-- "creates execution uncertainty" / "demonstrates their capability" / "strong alignment" \
-- "limits confidence in" in any form — replace with the named data point and implication \
-- "raises concerns about" in any form — replace with the specific data point
+- Only use numbers from THIS acquirer's data — never borrow a multiple from another acquirer \
+- Do not open both sentences with the same grammatical structure \
+- If citing a precedent deal 3× or more larger than the target EV, name the size ratio \
+  and explicitly what it does and does NOT prove about capability at this deal size \
+- Do not cite internal model scores ("sector affinity score," "/100," "composite score") \
+- Do not describe this buyer's position relative to other named acquirers by name — \
+  use type-group framing ("among {acquirer_type} buyers here") instead
 """
 
 

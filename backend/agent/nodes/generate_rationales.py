@@ -22,6 +22,99 @@ def _normalize_acquirer_type(raw: str) -> str:
     return "Strategic"
 
 
+def _build_peer_contexts(final_names: list, scored_map: dict, target) -> dict:
+    """
+    For each acquirer in the top-10 shortlist, compute where they rank among
+    their type-peers (Strategic vs. Financial Sponsor) on three dimensions:
+    in-sector deal count, comparable-size deals, and valuation posture.
+
+    Returns a dict mapping acquirer_name → formatted SHORTLIST PEER CONTEXT string.
+    Injected into each rationale prompt so the LLM can write Section 6 using
+    comparative facts rather than generic superlatives.
+    """
+    def _ordinal(n: int) -> str:
+        sfx = {1: "st", 2: "nd", 3: "rd"}
+        return f"{n}{sfx.get(n, 'th')}"
+
+    shortlist = []
+    for name in final_names:
+        c = scored_map.get(name, {})
+        acq_type = _normalize_acquirer_type(c.get("acquirer_type", "Strategic"))
+        sector_deals = c.get("sector_counts", {}).get(target.sector, 0)
+        deal_sizes = c.get("deal_sizes_mm", [])
+        size = target.deal_size_mm
+        near = sum(1 for d in deal_sizes if size * 0.5 <= d <= size * 2.0) if deal_sizes else 0
+        raw_ev = c.get("median_ev_ebitda")
+        try:
+            median_ev = float(raw_ev) if raw_ev not in (None, "N/A", "") else None
+        except (TypeError, ValueError):
+            median_ev = None
+        shortlist.append({
+            "name": name,
+            "type": acq_type,
+            "sector_deals": sector_deals,
+            "deals_near_target": near,
+            "median_ev_ebitda": median_ev,
+        })
+
+    peer_contexts: dict[str, str] = {}
+    for entry in shortlist:
+        name = entry["name"]
+        acq_type = entry["type"]
+        peers = [e for e in shortlist if e["type"] == acq_type]
+        n_peers = len(peers)
+
+        if n_peers <= 1:
+            peer_contexts[name] = ""
+            continue
+
+        sorted_sector = sorted(peers, key=lambda e: e["sector_deals"], reverse=True)
+        sorted_size = sorted(peers, key=lambda e: e["deals_near_target"], reverse=True)
+        rank_sector = next(i + 1 for i, e in enumerate(sorted_sector) if e["name"] == name)
+        rank_size = next(i + 1 for i, e in enumerate(sorted_size) if e["name"] == name)
+        top_sector_count = sorted_sector[0]["sector_deals"] if sorted_sector else 0
+        top_size_count = sorted_size[0]["deals_near_target"] if sorted_size else 0
+
+        sector_desc = (
+            f"Highest sector deal count ({entry['sector_deals']}) among {n_peers} {acq_type} buyers"
+            if rank_sector == 1 else
+            f"{_ordinal(rank_sector)} of {n_peers} {acq_type} buyers by in-sector deals "
+            f"({entry['sector_deals']} vs. {top_sector_count} for the leader)"
+        )
+        size_desc = (
+            f"Most comparable-size precedents ({entry['deals_near_target']} in 0.5x–2.0x range) among {n_peers} {acq_type} buyers"
+            if rank_size == 1 else
+            f"{_ordinal(rank_size)} of {n_peers} {acq_type} buyers by comparable-size deals "
+            f"({entry['deals_near_target']} vs. {top_size_count} for the leader)"
+        )
+
+        ev_line = ""
+        ev_peers = [e for e in peers if e["median_ev_ebitda"] is not None]
+        if len(ev_peers) >= 2:
+            sorted_ev = sorted(ev_peers, key=lambda e: e["median_ev_ebitda"], reverse=True)  # type: ignore[arg-type]
+            rank_ev = next((i + 1 for i, e in enumerate(sorted_ev) if e["name"] == name), None)
+            if rank_ev is not None:
+                ev_label = "highest" if rank_ev == 1 else "lowest" if rank_ev == len(sorted_ev) else _ordinal(rank_ev)
+                ev_line = (
+                    f"  • Valuation posture: {ev_label} EV/EBITDA among {n_peers} {acq_type} "
+                    f"buyers ({entry['median_ev_ebitda']}x vs. range {sorted_ev[-1]['median_ev_ebitda']}x–{sorted_ev[0]['median_ev_ebitda']}x)\n"
+                )
+
+        block = (
+            "SHORTLIST PEER CONTEXT\n"
+            "======================\n"
+            f"This acquirer among {n_peers} {acq_type} buyers in this shortlist:\n"
+            f"  • Sector calibration: {sector_desc}\n"
+            f"  • Size calibration: {size_desc}\n"
+            + ev_line +
+            "Use these rankings in Section 6 Sentence 1 to write a comparison\n"
+            "that is specific to this buyer's position in THIS process.\n\n"
+        )
+        peer_contexts[name] = block
+
+    return peer_contexts
+
+
 async def _generate_one(
     acquirer_name: str,
     rank: int,
@@ -32,6 +125,7 @@ async def _generate_one(
     emitter,
     co_strategics: list[str] | None = None,
     cached_comps_json: str | None = None,
+    peer_context: str = "",
 ) -> dict:
     """
     Build the full evidence packet for one acquirer then call the LLM.
@@ -497,6 +591,7 @@ async def _generate_one(
     prompt = RATIONALE_PROMPT_TEMPLATE.format(
         anomaly_flags=anomaly_flags,
         co_acquirer_context=co_acquirer_context,
+        peer_context=("\n" + peer_context) if peer_context else "",
         conviction_baseline=conviction_baseline,
         sector=target.sector,
         deal_size_mm=target.deal_size_mm,
@@ -623,14 +718,20 @@ async def _generate_one(
     # [strong] EBITDA margins complement/align with/support/enhance..." — not on any
     # mention of the target's margins, which is now encouraged with acquirer-specific framing.
     _ebitda_re = re.compile(
-        # Catches generic boilerplate: "the/this target's [strong] EBITDA margins [verb]"
-        # where the verb is standalone-generic (no acquirer-specific data needed to complete
-        # the thought). Informative uses that reference the acquirer's own data are permitted
-        # and pass. Added "will" and "provide" to catch "will enhance their valuation model"
-        # and "provide a compelling entry point" which bypassed the original pattern.
+        # Two patterns:
+        # 1. "the/this target's [strong] EBITDA margins [verb]" — standard boilerplate form
+        # 2. "the/this target's strong margins [verb]" — same boilerplate without "EBITDA" keyword
+        #    (Francisco Partners, Bain Capital bypass pattern 1 by dropping "EBITDA")
+        # Added: "are particularly relevant", "signal a favorable", "are critical for",
+        # "allow[s] them to leverage" to catch remaining observed variants.
         r"(?:the|this)\s+target'?s\s+(?:strong\s+)?ebitda\s+margins?\s+"
-        r"(?:complement|align\s+with|support|enhance|provide"
-        r"|are\s+consistent\s+with|are\s+attractive|are\s+aligned"
+        r"(?:complement|align\s+with|support|enhance|provide|signal|are\s+particularly"
+        r"|are\s+consistent\s+with|are\s+attractive|are\s+aligned|are\s+critical"
+        r"|(?:will|would|can|should|allow[s]?\s+them\s+to)\s+"
+        r"(?:improve|support|enhance|complement|align|benefit|strengthen|provide|leverage))"
+        r"|(?:the|this)\s+target'?s\s+strong\s+margins?\s+"
+        r"(?:complement|align\s+with|support|enhance|provide|signal|are\s+particularly"
+        r"|are\s+consistent\s+with|are\s+attractive|are\s+aligned|are\s+critical"
         r"|(?:will|would|can|should)\s+(?:improve|support|enhance|complement|align"
         r"|benefit|strengthen|provide))",
         re.IGNORECASE,
@@ -699,14 +800,15 @@ async def _generate_one(
     # Scan runs on the current result (after any EBITDA repair) so it catches
     # phrases introduced by the EBITDA repair as well as first-pass output.
     _filler_re = re.compile(
-        # Catches two categories of persistent filler:
-        # 1. "positions [name/them] uniquely [to/as/...]" — the most common opener
-        # 2. "fill(s/ing) [optional modifiers] gap" — e.g. "fills a critical sub-sector gap",
-        #    "fills a gap in their portfolio", "filling a gap in the target sector" — all
-        #    variants that escaped prompt-level bans. The {0,4} allows up to 4 modifiers
-        #    between "fill*" and "gap" (e.g., "fills a critical sub-sector portfolio gap").
+        # Catches three categories of persistent filler in strategic_fit_thesis:
+        # 1. "positions [name/them] uniquely [to/as/...]" — classic opener
+        # 2. "fill(s/ing) [0-4 words] gap" — all "fills a [X] gap" variants
+        # 3. "illustrate[s] their focus on [expanding/this sector]" — new dominant
+        #    opener appearing on 6/10 pages; only applied to strategic_fit_thesis
+        #    since "illustrates" can appear legitimately elsewhere.
         r"positions\s+(?:\w+\s+){1,3}uniquely\b"
-        r"|fill(?:s|ing)?\s+(?:[\w-]+\s+){0,4}gap\b",
+        r"|fill(?:s|ing)?\s+(?:[\w-]+\s+){0,4}gap\b"
+        r"|illustrates?\s+their\s+(?:focus|commitment|strategy)\s+on\b",
         re.IGNORECASE,
     )
     _filler_scan = " ".join(filter(None, [
@@ -775,6 +877,85 @@ async def _generate_one(
             result.get("acquirer_overview", "")
         )
 
+    # Post-generation scan for forbidden conviction_rationale phrases.
+    # These are short 2-sentence fields where gpt-4o-mini reliably defaults to 3–4
+    # structural templates regardless of prompt bans. Python substitution is faster
+    # and more consistent than another LLM repair call on a 2-sentence field.
+    #
+    # Patterns caught:
+    # 1. "However" as sentence 2 opener — the most recycled structure (4/10 pages in last run)
+    # 2. "raises concerns about" as sentence 2 opener
+    # 3. "provide[s] a solid/strong foundation" — new dominant sentence 1 template (4/10 pages)
+    # 4. "positions them as [a/an] [X] [candidate/buyer]"
+    # 5. "demonstrates/demonstrating their commitment" — in Section 6 FORBIDDEN list but
+    #    gpt-4o-mini ignores long forbidden lists in short structured fields
+    _conviction_text = result.get("conviction_rationale", "")
+    _conviction_changed = False
+
+    # Pattern 1: "However, [anything]" starting any sentence — replace the opener only.
+    # The content after "However, " is usually valid; the word itself is the template cue.
+    _conviction_text, _n1 = re.subn(
+        r'\bHowever,\s+',
+        '',
+        _conviction_text,
+        flags=re.IGNORECASE,
+    )
+    if _n1:
+        _conviction_changed = True
+
+    # Pattern 2: "raises concerns about" → "the specific concern is"
+    _conviction_text, _n2 = re.subn(
+        r'\braises\s+concerns\s+about\b',
+        'the specific concern is',
+        _conviction_text,
+        flags=re.IGNORECASE,
+    )
+    if _n2:
+        _conviction_changed = True
+
+    # Pattern 3: "[X] provide[s] a solid/strong foundation for this acquisition"
+    # Replace the whole clause with a data-anchored size-precision claim.
+    _foundation_re = re.compile(
+        r"[\w\s']+provide[s]?\s+a\s+(?:solid|strong)\s+foundation\s+for\s+this\s+acquisition",
+        re.IGNORECASE,
+    )
+    if _foundation_re.search(_conviction_text):
+        _size_claim = (
+            f"{acquirer_name}'s {deals_near_target} deals in the {target_size_band} "
+            f"size band and {primary_sector_deal_count} in {target.sector} "
+            f"make them the {'most' if primary_sector_deal_count > 1 else 'a relevant'} "
+            f"sector-calibrated buyer on this shortlist"
+        )
+        _conviction_text = _foundation_re.sub(_size_claim, _conviction_text)
+        _conviction_changed = True
+
+    # Pattern 4: "positions them as a [X] candidate/buyer"
+    _conviction_text, _n4 = re.subn(
+        r'\bpositions\s+them\s+as\s+(?:a|an)\s+\w+\s+(?:candidate|buyer)\b',
+        f'ranks {acquirer_name} as a shortlist candidate on deal size and sector fit',
+        _conviction_text,
+        flags=re.IGNORECASE,
+    )
+    if _n4:
+        _conviction_changed = True
+
+    # Pattern 5: "demonstrates/demonstrating their commitment"
+    _conviction_text, _n5 = re.subn(
+        r'\bdemonstrat(?:es|ing)\s+their\s+commitment\s+to\b',
+        'with',
+        _conviction_text,
+        flags=re.IGNORECASE,
+    )
+    if _n5:
+        _conviction_changed = True
+
+    if _conviction_changed:
+        logger.warning(
+            "conviction_boilerplate_detected_applying_python_fix",
+            acquirer=acquirer_name,
+        )
+        result["conviction_rationale"] = _conviction_text.strip()
+
     return result
 
 
@@ -837,6 +1018,10 @@ async def node_generate_rationales(state: AgentState, config: RunnableConfig) ->
         except Exception as e:
             logger.warning("valuation_comps_prefetch_failed", error=str(e))
 
+    # Build peer rankings for all 10 acquirers — injected into each rationale prompt
+    # so the LLM can write Section 6 using comparative facts rather than generic superlatives.
+    peer_contexts = _build_peer_contexts(final_names, scored_map, target)
+
     # Semaphore(10): run all 10 calls in a single batch. gpt-4o-mini's TPM limit is
     # high enough that 10 concurrent calls do not trigger rate-limit backoff at Tier 1.
     # Dropping to 5 added ~8-10s by forcing two sequential batches — not worth it.
@@ -846,7 +1031,8 @@ async def node_generate_rationales(state: AgentState, config: RunnableConfig) ->
         async with sem:
             is_pe = _normalize_acquirer_type(candidate.get("acquirer_type", "Strategic")) == "Financial Sponsor"
             co_strategics = strategic_names_in_run if is_pe else []
-            return await _generate_one(name, rank, candidate, target, tool_map, app_state, emitter, co_strategics, cached_comps_json)
+            peer_ctx = peer_contexts.get(name, "")
+            return await _generate_one(name, rank, candidate, target, tool_map, app_state, emitter, co_strategics, cached_comps_json, peer_ctx)
 
     results = await asyncio.gather(
         *[_throttled(name, rank, scored_map.get(name, {})) for rank, name in enumerate(final_names, 1)],
