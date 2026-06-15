@@ -45,8 +45,7 @@ export default function RunHistory({ onSelectRun, activeRunId, refreshKey, onNew
 
   const handleClick = async (run) => {
     if (run.status === 'running') {
-      // Reconnect to the live SSE stream for this run
-      onSelectRun(run.run_id, null, null, true)
+      onSelectRun(run.run_id, null, run.target || null, true)
       return
     }
     if (run.status !== 'completed') return

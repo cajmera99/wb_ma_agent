@@ -48,11 +48,12 @@ export default function App() {
   const [refreshKey, setRefreshKey] = useState(0)
   const [historicalTarget, setHistoricalTarget] = useState(null)
   // formLocked: true from the moment Submit is clicked until "+ New" is clicked.
-  // Prevents re-submission on a completed run without clearing state first.
   const [formLocked, setFormLocked] = useState(false)
-  // Incrementing this tells TargetForm to reset to DEFAULTS regardless of whether
-  // historicalTarget changed (it stays null between runs, so its useEffect won't fire).
+  // Incrementing this tells TargetForm to reset to DEFAULTS.
   const [formResetKey, setFormResetKey] = useState(0)
+  // lockedTarget: the submitted parameters of the currently active run.
+  // Populates the form during a run WITHOUT triggering the "Viewing historical run" badge.
+  const [lockedTarget, setLockedTarget] = useState(null)
 
   // On mount: reconnect to a running run (page refresh mid-run), or restore
   // the latest completed run so results survive a refresh.
@@ -68,6 +69,7 @@ export default function App() {
           setRunId(running.run_id)
           setLoading(true)
           setFormLocked(true)
+          setLockedTarget(running.target || null)
           setStreamUrl(`/api/runs/${running.run_id}/stream`)
           setRefreshKey((k) => k + 1)
           return
@@ -89,8 +91,9 @@ export default function App() {
       .catch(() => {})
   }, [])
 
-  const handleRunStarted = (id, url) => {
+  const handleRunStarted = (id, url, submittedTarget) => {
     setFormLocked(true)
+    setLockedTarget(submittedTarget || null)
     setRunId(id)
     setStreamUrl(url)
     setLoading(true)
@@ -109,13 +112,14 @@ export default function App() {
     setRunId(id)
     setResult(isRunning ? null : data)
     setHistoricalTarget(isRunning ? null : (target || null))
+    setLockedTarget(isRunning ? (target || null) : null)
     setLoading(isRunning)
-    // Reconnect to the SSE stream so the progress panel reappears
     setStreamUrl(isRunning ? `/api/runs/${id}/stream` : null)
   }
 
   const handleNewAnalysis = () => {
     setFormLocked(false)
+    setLockedTarget(null)
     setHistoricalTarget(null)
     setResult(null)
     setRunId(null)
@@ -150,6 +154,7 @@ export default function App() {
             loading={loading}
             formLocked={formLocked}
             historicalTarget={historicalTarget}
+            lockedTarget={lockedTarget}
             resetKey={formResetKey}
           />
 

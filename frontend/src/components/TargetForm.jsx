@@ -59,12 +59,12 @@ const DEFAULTS = {
   profile_description: 'Mid-market, private, regional, strong EBITDA margins',
 }
 
-export default function TargetForm({ onRunStarted, loading, formLocked, historicalTarget, resetKey }) {
+export default function TargetForm({ onRunStarted, loading, formLocked, historicalTarget, lockedTarget, resetKey }) {
   const [form, setForm] = useState(DEFAULTS)
   // editMode: false = locked (viewing history), true = editable (new or editing)
   const [editMode, setEditMode] = useState(true)
 
-  // When a historical run is selected, populate + lock the form
+  // When a completed historical run is selected, populate + lock the form
   useEffect(() => {
     if (!historicalTarget) return
     setForm({
@@ -76,6 +76,21 @@ export default function TargetForm({ onRunStarted, loading, formLocked, historic
     })
     setEditMode(false)
   }, [historicalTarget])
+
+  // Populate form with the active run's submitted parameters.
+  // Does NOT change editMode — the form is locked via formLocked prop, not editMode.
+  // This keeps the correct values visible during a run, on refresh, and when
+  // switching from a completed run to the currently running one in the sidebar.
+  useEffect(() => {
+    if (!lockedTarget) return
+    setForm({
+      sector: lockedTarget.sector || DEFAULTS.sector,
+      deal_size_mm: lockedTarget.deal_size_mm || DEFAULTS.deal_size_mm,
+      geography: lockedTarget.geography || DEFAULTS.geography,
+      ownership: lockedTarget.ownership || DEFAULTS.ownership,
+      profile_description: lockedTarget.profile_description || DEFAULTS.profile_description,
+    })
+  }, [lockedTarget])
 
   // "+ New" increments resetKey. Resets form and clears the module-level submit lock
   // so a stuck lock can never permanently block future submissions.
@@ -102,7 +117,7 @@ export default function TargetForm({ onRunStarted, loading, formLocked, historic
         body: JSON.stringify(body),
       })
       const data = await res.json()
-      onRunStarted(data.run_id, data.stream_url)
+      onRunStarted(data.run_id, data.stream_url, body)
     } finally {
       _submitInFlight = false
     }
