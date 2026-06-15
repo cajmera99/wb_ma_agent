@@ -60,7 +60,7 @@ const DEFAULTS = {
   profile_description: 'Mid-market, private, regional, strong EBITDA margins',
 }
 
-export default function TargetForm({ onRunStarted, loading, historicalTarget, onNewAnalysis }) {
+export default function TargetForm({ onRunStarted, loading, formLocked, historicalTarget, onNewAnalysis }) {
   const [form, setForm] = useState(DEFAULTS)
   // editMode: false = locked (viewing history), true = editable (new or editing)
   const [editMode, setEditMode] = useState(true)
@@ -88,7 +88,9 @@ export default function TargetForm({ onRunStarted, loading, historicalTarget, on
     onNewAnalysis()
   }
 
-  const fieldDisabled = !editMode || loading
+  // Fields + submit are disabled while a run is in progress OR after it completes.
+  // Only "+ New" resets formLocked and re-enables the form.
+  const fieldDisabled = formLocked || !editMode || loading
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
 
   const handleSubmit = async (e) => {

@@ -638,49 +638,56 @@ async def _generate_one(
     ] + [rf.get("description", "") for rf in result.get("risk_flags", []) if isinstance(rf, dict)]))
 
     if _ebitda_re.search(_scan_text):
-        logger.warning("forbidden_ebitda_phrase_detected_triggering_repair", acquirer=acquirer_name)
-        emitter.emit(EventType.VALIDATION_FAILED, node="generate_rationales", data={
-            "acquirer": acquirer_name, "error": "forbidden_ebitda_attribution_detected"
-        })
-        _repair_msg = HumanMessage(content=(
-            "CONTENT VIOLATION — your response must be corrected before delivery.\n\n"
-            "One or more sections contain generic EBITDA margin boilerplate matching "
-            "'the/this target's [strong] EBITDA margins complement / align with / support / "
-            "enhance [acquirer]'s strategy' or a close variant. This is prohibited because "
-            "it applies identically to every acquirer on the shortlist — it is not analysis.\n\n"
-            "IMPORTANT: You may and should reference the target's strong margins — but make "
-            "the claim specific to THIS acquirer. Acceptable framings:\n"
-            "- Compare to this acquirer's historical acquisition margins "
-            "(acquired_co_ebitda_margin_pct from precedent deals provided above)\n"
-            "- For PE sponsors: explain what high entry margins mean for IRR at the expected "
-            "entry and exit multiple\n"
-            "- For strategic buyers: explain whether the target's profile is above, at, or "
-            "below what this acquirer typically acquires, and what that implies for pricing\n\n"
-            "Do NOT invent a margin %. 'Strong' is the only descriptor you have.\n\n"
-            "CRITICAL — the following replacement phrases are ALSO forbidden and will "
-            "trigger another rejection if you use them:\n"
-            "  - 'positions them [uniquely/well/to] [leverage/capitalize/...]'\n"
-            "  - 'fills a [critical/specific/key] [X] gap'\n"
-            "  - 'fills a critical need for'\n"
-            "  - 'adds a critical [X] capability'\n"
-            "Use actual numbers from the IRR math, margin comparison, or sub-sector count "
-            "instead of these connector phrases.\n\n"
-            "Produce a corrected full response — all other sections unchanged."
-        ))
-        try:
-            _repaired = await _call_structured_with_retry(llm_structured, messages + [_repair_msg])
-            emitter.emit(EventType.VALIDATION_REPAIRED, node="generate_rationales", data={
-                "acquirer": acquirer_name
-            })
-            logger.info("ebitda_repair_succeeded", acquirer=acquirer_name)
-            result = _repaired.model_dump()
-            result["rank"] = rank
-            result["sub_scores"] = sub_scores
-            result["composite_score"] = candidate.get("composite_score", result.get("composite_score", 0))
-            result["conviction_level"] = conviction_baseline
-        except Exception as _ebitda_repair_err:
-            logger.error("ebitda_repair_failed", acquirer=acquirer_name, error=str(_ebitda_repair_err))
-            # Keep original result — better than a stub
+        # Python sentence substitution — same pattern as filler phrase fix.
+        # LLM repair for EBITDA boilerplate was adding 8–28s on the critical path
+        # and occasionally introduced new violations. Template replacement is instant
+        # and uses pre-computed margin data already in scope.
+        logger.warning("forbidden_ebitda_phrase_detected_applying_python_fix", acquirer=acquirer_name)
+
+        def _replace_ebitda_sentences(text: str) -> str:
+            if not _ebitda_re.search(text):
+                return text
+            parts = re.split(r'(?<=[.!?])\s+', text.strip())
+            fixed = []
+            for sent in parts:
+                if _ebitda_re.search(sent):
+                    if _margin_data:
+                        _avg_m = round(sum(_margin_data) / len(_margin_data), 1)
+                        if acquirer_type == "Financial Sponsor":
+                            _mult = f"{acquirer_median_ebitda:.1f}x" if acquirer_median_ebitda else "their prevailing entry multiple"
+                            replacement = (
+                                f"{acquirer_name}'s precedent acquisitions averaged "
+                                f"{_avg_m}% EBITDA margins across {len(_margin_data)} deals — "
+                                f"the target's strong profile exceeds that baseline, supporting "
+                                f"entry at {_mult} while preserving IRR at exit."
+                            )
+                        else:
+                            replacement = (
+                                f"The target's strong margins compare favorably to "
+                                f"{acquirer_name}'s prior acquisitions, which averaged "
+                                f"{_avg_m}% EBITDA margins across {len(_margin_data)} precedent deals."
+                            )
+                    else:
+                        if acquirer_type == "Financial Sponsor":
+                            _mult = f"{acquirer_median_ebitda:.1f}x" if acquirer_median_ebitda else "their prevailing entry multiple"
+                            replacement = (
+                                f"The target's strong margins provide a larger absolute EBITDA "
+                                f"base for {acquirer_name}, directly supporting IRR targets at {_mult}."
+                            )
+                        else:
+                            _mult = f"their {acquirer_median_ebitda:.1f}x historical median" if acquirer_median_ebitda else "their historical pricing"
+                            replacement = (
+                                f"The target's margin profile is a differentiated asset "
+                                f"for {acquirer_name} relative to {_mult}."
+                            )
+                    fixed.append(replacement)
+                else:
+                    fixed.append(sent)
+            return " ".join(fixed)
+
+        result["strategic_fit_thesis"] = _replace_ebitda_sentences(result.get("strategic_fit_thesis", ""))
+        result["conviction_rationale"] = _replace_ebitda_sentences(result.get("conviction_rationale", ""))
+        result["acquirer_overview"] = _replace_ebitda_sentences(result.get("acquirer_overview", ""))
 
     # Post-generation scan for forbidden filler phrases.
     # Prompt-layer instructions alone do not reliably suppress these from gpt-4o-mini.

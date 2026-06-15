@@ -47,6 +47,9 @@ export default function App() {
   const [result, setResult] = useState(null)
   const [refreshKey, setRefreshKey] = useState(0)
   const [historicalTarget, setHistoricalTarget] = useState(null)
+  // formLocked: true from the moment Submit is clicked until "+ New" is clicked.
+  // Prevents re-submission on a completed run without clearing state first.
+  const [formLocked, setFormLocked] = useState(false)
 
   // On mount: restore the most recent completed run from the backend so a
   // browser refresh doesn't wipe the main content (the server still has it).
@@ -70,6 +73,7 @@ export default function App() {
   }, [])
 
   const handleRunStarted = (id, url) => {
+    setFormLocked(true)
     setRunId(id)
     setStreamUrl(url)
     setLoading(true)
@@ -94,6 +98,7 @@ export default function App() {
   }
 
   const handleNewAnalysis = () => {
+    setFormLocked(false)
     setHistoricalTarget(null)
     setResult(null)
     setRunId(null)
@@ -117,7 +122,7 @@ export default function App() {
       <div style={S.layout}>
         {/* Sidebar — run history */}
         <aside>
-          <RunHistory onSelectRun={handleSelectHistoricalRun} activeRunId={runId} refreshKey={refreshKey} onNewAnalysis={handleNewAnalysis} />
+          <RunHistory onSelectRun={handleSelectHistoricalRun} activeRunId={runId} refreshKey={refreshKey} onNewAnalysis={handleNewAnalysis} formLocked={formLocked} />
         </aside>
 
         {/* Main content */}
@@ -125,6 +130,7 @@ export default function App() {
           <TargetForm
             onRunStarted={handleRunStarted}
             loading={loading}
+            formLocked={formLocked}
             historicalTarget={historicalTarget}
             onNewAnalysis={handleNewAnalysis}
           />
