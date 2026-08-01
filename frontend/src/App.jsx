@@ -136,7 +136,6 @@ export default function App() {
       <header style={S.header}>
         <div>
           <div style={S.headerTitle}>M&A Acquirer Identification Engine</div>
-          <div style={S.headerSub}>William Blair — AI Innovation Assessment</div>
         </div>
         <div style={{ fontSize: 11, color: '#c8d8ee' }}>Powered by LangGraph + GPT-4o</div>
       </header>

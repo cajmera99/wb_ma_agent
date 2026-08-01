@@ -6,7 +6,7 @@ Developer guide for AI assistants and new contributors. Documents architecture d
 
 ## Project Overview
 
-William Blair AI Innovation Team take-home assessment. Given a target company profile and 500 historical M&A transactions, identify the 10 most likely acquirers and generate a one-page rationale for each. Output is a 10-page PDF.
+Given a target company profile and 500 historical M&A transactions, identify the 10 most likely acquirers and generate a one-page rationale for each. Output is a 10-page PDF.
 
 Graded on: agentic system design, LLM prompt quality, structured output validation, production-grade patterns (tool use, dynamic routing, observability), and code quality.
 
@@ -18,7 +18,7 @@ Graded on: agentic system design, LLM prompt quality, structured output validati
 # Backend — restrict reload watcher to backend/ so frontend file saves don't
 # restart the server and wipe the in-memory RunStore
 conda activate wb_ib_env        # Python 3.11, created for this project
-cd William_Blair_IB_Project
+cd wb_ma_agent
 uvicorn backend.main:app --reload --reload-dir backend --port 8000
 
 # Frontend (separate terminal)
@@ -44,7 +44,7 @@ OPENAI_MODEL=gpt-4o
 ## Repository Structure
 
 ```
-William_Blair_IB_Project/
+wb_ma_agent/
 ├── backend/
 │   ├── main.py                     # FastAPI app, lifespan startup
 │   ├── core/

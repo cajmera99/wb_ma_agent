@@ -238,7 +238,7 @@ async def view_graph():
 <body>
 <header>
   <h1>M&A Acquirer Identification — Agent Workflow</h1>
-  <span>LangGraph StateGraph &nbsp;·&nbsp; GPT-4o &nbsp;·&nbsp; William Blair AI</span>
+  <span>LangGraph StateGraph &nbsp;·&nbsp; GPT-4o &nbsp;·&nbsp;</span>
 </header>
 
 <div class="layout">

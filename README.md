@@ -2,8 +2,6 @@
 
 A production-grade agentic system that identifies the 10 most likely acquirers for a target company using 500 historical M&A transactions and LLM synthesis. Output is a 10-page PDF — one page per acquirer — with data-backed rationale, valuation context, risk flags, and conviction levels.
 
-Built for the William Blair AI Innovation Team take-home assessment.
-
 ---
 
 ## Live Demo

@@ -42,7 +42,7 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 # Usable content width: letter (8.5") minus left + right margins (0.6" each)
 PAGE_W = 7.3 * inch
 
-# William Blair palette (approximate)
+# color palette
 WB_BLUE = HexColor("#003087")
 WB_LIGHT_BLUE = HexColor("#EAF0F8")
 WB_GRAY = HexColor("#F5F5F5")
